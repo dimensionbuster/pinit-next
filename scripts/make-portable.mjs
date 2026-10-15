@@ -4,14 +4,16 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+// fileURLToPath decodes percent-escapes (non-ASCII folder names) that URL.pathname leaves encoded
+const root = fileURLToPath(new URL("..", import.meta.url));
 const exe = join(root, "target", "release", "pinit-next.exe");
 const out = join(root, "release-portable", "PinIt");
 
 const build = spawnSync("npx", ["tauri", "build", "--no-bundle"], { cwd: root, stdio: "inherit", shell: true });
 if (build.status !== 0 || !existsSync(exe)) {
-  console.error("build failed");
+  console.error("build failed", build.error ?? "");
   process.exit(build.status ?? 1);
 }
 

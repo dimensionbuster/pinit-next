@@ -21,6 +21,8 @@
 - [x] 브라우저 연동 완료: 확장(우클릭 메뉴, 권한 contextMenus+nativeMessaging만) + Native Messaging 호스트(같은 exe, 열린 포트 없음, 레지스트리 HKCU 자동 등록). 가짜 브라우저로 end-to-end 검증(첫 메시지가 앱 기동, 이후 메시지는 실행 중 인스턴스로 전달, file:// 등 거부)
 - [x] 포터블: `portable.flag` 옆 exe → 모든 데이터가 `PinIt-data/`(AppData 무접촉 확인), 확장은 exe에 내장, 단일 6.3MB exe. `npm run build:portable` → `release-portable/PinIt/`
 - [x] 릴리스 실행에서 UI 스레드 데드락 발견·수정(락 잡는 IPC 커맨드는 전부 async). 20창 스트레스(동시 다중 인스턴스 실행) 응답 정상, 겹침 0, 다시 정렬 정상
+- [x] 사용자 피드백 반영: 리사이즈 시 이미지 비율 강제 맞춤 제거(수동 "비율에 맞춤" 버튼만), 자유 회전 시 자동 배율 보정 제거, 이미지 뒤 배경 색/투명도 설정(기본 검정 40%, 열린 창에 즉시 반영), 90° 회전은 창 가로세로 맞바꿈
+- [ ] **결정 대기**: 다시 정렬이 사용자가 직접 조절한 창 크기를 버림(이미지 비율+설정 크기로 재계산). "현재 크기 유지" 토글을 추가할지
 - [ ] **다음**: 확인되지 않은 것: 실제 Chrome에서 확장 로드(수동), 인스톨러(NSIS)/파일 연결, 아이콘 교체, README + Native Messaging 호스트(`chrome-extension://` 인자 감지), 패키징(NSIS, 파일 연결)
 - [ ] (보류) Phase 1 잔여 스파이크(Native Messaging 바이트 전달, 투명창 드래그·자유각도 회전)
 - [ ] (원 항목)(투명창 20개 메모리, Native Messaging 바이트 전달, 혼합 DPI), DESIGN.md(/design-consultation), 어댑터, UI, 확장
