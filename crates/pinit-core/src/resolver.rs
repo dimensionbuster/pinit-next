@@ -7,11 +7,11 @@ use crate::ports::{ImageResolver, ResolveError, ResolvedImage};
 /// Tries each resolver in order. `Unsupported` falls through silently; real
 /// failures are remembered and the last one is reported if nothing succeeds.
 pub struct ChainResolver {
-    links: Vec<Box<dyn ImageResolver>>,
+    links: Vec<Box<dyn ImageResolver + Send + Sync>>,
 }
 
 impl ChainResolver {
-    pub fn new(links: Vec<Box<dyn ImageResolver>>) -> Self {
+    pub fn new(links: Vec<Box<dyn ImageResolver + Send + Sync>>) -> Self {
         Self { links }
     }
 }
@@ -33,17 +33,17 @@ impl ImageResolver for ChainResolver {
 #[cfg(test)]
 pub(crate) mod fakes {
     use super::*;
-    use std::cell::Cell;
-    use std::rc::Rc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
 
     pub struct Fixed {
         pub answer: Result<(u32, u32), ResolveError>,
-        pub calls: Rc<Cell<u32>>,
+        pub calls: Arc<AtomicU32>,
     }
 
     impl ImageResolver for Fixed {
         fn resolve(&self, image: &ImageRef) -> Result<ResolvedImage, ResolveError> {
-            self.calls.set(self.calls.get() + 1);
+            self.calls.fetch_add(1, Ordering::SeqCst);
             self.answer
                 .clone()
                 .map(|(width, height)| ResolvedImage {
@@ -60,15 +60,17 @@ pub(crate) mod fakes {
 mod tests {
     use super::fakes::Fixed;
     use super::*;
-    use std::cell::Cell;
-    use std::rc::Rc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
 
     fn img() -> ImageRef {
         ImageRef::Url { url: "https://e.com/a.jpg".into(), referer: None }
     }
 
-    fn link(answer: Result<(u32, u32), ResolveError>) -> (Box<dyn ImageResolver>, Rc<Cell<u32>>) {
-        let calls = Rc::new(Cell::new(0));
+    fn link(
+        answer: Result<(u32, u32), ResolveError>,
+    ) -> (Box<dyn ImageResolver + Send + Sync>, Arc<AtomicU32>) {
+        let calls = Arc::new(AtomicU32::new(0));
         (Box::new(Fixed { answer, calls: calls.clone() }), calls)
     }
 
@@ -78,7 +80,7 @@ mod tests {
         let (b, cb) = link(Ok((99, 99)));
         let r = ChainResolver::new(vec![a, b]).resolve(&img()).unwrap();
         assert_eq!((r.width, r.height), (10, 20));
-        assert_eq!((ca.get(), cb.get()), (1, 0));
+        assert_eq!((ca.load(Ordering::SeqCst), cb.load(Ordering::SeqCst)), (1, 0));
     }
 
     #[test]

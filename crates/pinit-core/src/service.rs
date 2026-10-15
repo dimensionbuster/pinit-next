@@ -9,8 +9,8 @@ use crate::placement::{
     relayout, Anchor, FrontierPlacement, PlacementRequest, PlacementStrategy, SizeRule,
 };
 use crate::ports::{
-    Display, DisplayId, DisplayProvider, HostError, ImageResolver, ResolveError, SavedWindow,
-    WindowHost, WindowId, WindowSpec,
+    Display, DisplayId, DisplayProvider, HostError, ImageResolver, ResolveError, ResolvedImage,
+    SavedWindow, WindowHost, WindowId, WindowSpec,
 };
 use crate::rng::{Rng, SplitMix64};
 use crate::view_state::ViewState;
@@ -123,22 +123,40 @@ impl OpenService {
         self.config = config;
     }
 
-    pub fn open(&mut self, req: OpenRequest) -> Result<OpenOutcome, OpenError> {
-        let key = req.image.key();
-        if let Some(e) = self.windows.iter().find(|e| e.key == key) {
-            return Ok(OpenOutcome::AlreadyOpen(e.id));
-        }
+    /// Window already showing this image, if any (cheap; call before resolving).
+    pub fn find_open(&self, image: &ImageRef) -> Option<WindowId> {
+        let key = image.key();
+        self.windows.iter().find(|e| e.key == key).map(|e| e.id)
+    }
 
+    /// Resolve with the built-in resolver, then open. The resolver may block
+    /// (network); callers that cannot hold the service lock that long should
+    /// resolve first and call [`open_resolved`](Self::open_resolved).
+    pub fn open(&mut self, req: OpenRequest) -> Result<OpenOutcome, OpenError> {
+        if let Some(id) = self.find_open(&req.image) {
+            return Ok(OpenOutcome::AlreadyOpen(id));
+        }
         let resolved = self.resolver.resolve(&req.image).map_err(OpenError::Resolve)?;
+        self.open_resolved(resolved, req.restore)
+    }
+
+    pub fn open_resolved(
+        &mut self,
+        resolved: ResolvedImage,
+        restore: Option<Restore>,
+    ) -> Result<OpenOutcome, OpenError> {
+        let key = resolved.image.key();
+        if let Some(id) = self.find_open(&resolved.image) {
+            return Ok(OpenOutcome::AlreadyOpen(id));
+        }
         let natural_aspect = resolved
             .aspect()
             .ok_or_else(|| OpenError::Resolve(ResolveError::Failed("image has no size".into())))?;
-        let view = req.restore.as_ref().map(|r| r.view).unwrap_or_default();
+        let view = restore.as_ref().map(|r| r.view).unwrap_or_default();
         let aspect = view.effective_aspect(natural_aspect);
 
         let displays = self.displays.displays();
-        let (display_id, bounds) = match req
-            .restore
+        let (display_id, bounds) = match restore
             .as_ref()
             .and_then(|r| display_for_rect(&displays, &r.bounds).map(|d| (d.id, r.bounds)))
         {
