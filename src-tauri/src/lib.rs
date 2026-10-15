@@ -137,10 +137,9 @@ pub fn run() {
             }
 
             // Keep the browser bridge registered (idempotent; follows a moved/updated exe).
-            // Debug builds skip registration (they would hijack a real install's browser bridge)
-            // unless PINIT_REGISTER=1; PINIT_NO_REGISTER=1 always skips.
-            let register = std::env::var_os("PINIT_NO_REGISTER").is_none()
-                && (!cfg!(debug_assertions) || std::env::var_os("PINIT_REGISTER").is_some());
+            // Debug builds register under the dev host name (see native_host.rs), so they never
+            // touch a real install's registration. PINIT_NO_REGISTER=1 skips registration entirely.
+            let register = std::env::var_os("PINIT_NO_REGISTER").is_none();
             if let (Ok(exe), true) = (std::env::current_exe(), register) {
                 let dir = paths::Paths::detect().data;
                 std::thread::spawn(move || {

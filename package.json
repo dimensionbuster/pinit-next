@@ -10,7 +10,7 @@
     "test": "node --test \"src/**/*.test.ts\" extension/extension.test.mjs",
     "tauri": "tauri",
     "build:portable": "node scripts/make-portable.mjs",
-    "dev:app": "tauri dev -c src-tauri/tauri.dev.conf.json",
+    "dev:app": "node scripts/dev.mjs",
     "check": "tsc && npm test && cargo test --workspace"
   },
   "dependencies": {

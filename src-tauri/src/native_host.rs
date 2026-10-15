@@ -16,9 +16,17 @@ use serde_json::{json, Value};
 
 use crate::b64;
 
-/// Derived from the public `key` in extension/manifest.json (checked by extension/extension.test.mjs).
-pub const EXTENSION_ID: &str = "ommodopihncklghppcleifpgdbhpkmbg";
-pub const HOST_NAME: &str = "com.pinit.next";
+// IDs are derived from the public `key` in extension/manifest.json (prod) and
+// scripts/dev-extension.json (dev); extension/extension.test.mjs checks both.
+pub const PROD_EXTENSION_ID: &str = "ommodopihncklghppcleifpgdbhpkmbg";
+pub const DEV_EXTENSION_ID: &str = "ncpmjchiacnkhdfniogljjghbndahaio";
+pub const PROD_HOST_NAME: &str = "com.pinit.next";
+pub const DEV_HOST_NAME: &str = "com.pinit.next.dev";
+
+/// Debug builds speak to the dev extension under their own host name, so a developer
+/// can run the real PinIt and the debug build (each with its own extension) side by side.
+pub const EXTENSION_ID: &str = if cfg!(debug_assertions) { DEV_EXTENSION_ID } else { PROD_EXTENSION_ID };
+pub const HOST_NAME: &str = if cfg!(debug_assertions) { DEV_HOST_NAME } else { PROD_HOST_NAME };
 
 const MAX_MESSAGE_BYTES: usize = 48 * 1024 * 1024;
 const MAX_URL_LEN: usize = 8192;

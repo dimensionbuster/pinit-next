@@ -23,6 +23,7 @@
 - [x] 릴리스 실행에서 UI 스레드 데드락 발견·수정(락 잡는 IPC 커맨드는 전부 async). 20창 스트레스(동시 다중 인스턴스 실행) 응답 정상, 겹침 0, 다시 정렬 정상
 - [x] 사용자 피드백 반영: 리사이즈 시 이미지 비율 강제 맞춤 제거(수동 "비율에 맞춤" 버튼만), 자유 회전 시 자동 배율 보정 제거, 이미지 뒤 배경 색/투명도 설정(기본 검정 40%, 열린 창에 즉시 반영), 90° 회전은 창 가로세로 맞바꿈
 - [x] 사용자 피드백 2차 반영: "다시 정렬 시 현재 크기 유지" 토글(place_exact), 새 창을 띄울 화면 버그(모니터 id 64비트가 JS에서 손상 → 52비트로 마스킹), 혼합 DPI에서 창이 2/3로 줄던 버그(WM_DPICHANGED; apply_bounds가 위치→크기 순서+재시도), .pinit 레이아웃 저장/불러오기(세션 파일과 같은 형식), 개발 가이드(docs/DEVELOPING.md)와 격리된 `npm run dev:app`(식별자 com.pinit.next.dev, 레지스트리 무접촉)
+- [x] 개발용 확장/호스트 분리: 디버그 빌드는 호스트 `com.pinit.next.dev` + 별도 확장 ID(`scripts/dev-extension.json`)로만 등록, `npm run dev:app`이 `extension-dev/` 생성. 실사용 등록은 건드리지 않음(레지스트리로 확인)
 - [ ] **다음**: 확인되지 않은 것: 실제 Chrome에서 확장 로드(수동), 인스톨러(NSIS)/파일 연결, 아이콘 교체, README + Native Messaging 호스트(`chrome-extension://` 인자 감지), 패키징(NSIS, 파일 연결)
 - [ ] (보류) Phase 1 잔여 스파이크(Native Messaging 바이트 전달, 투명창 드래그·자유각도 회전)
 - [ ] (원 항목)(투명창 20개 메모리, Native Messaging 바이트 전달, 혼합 DPI), DESIGN.md(/design-consultation), 어댑터, UI, 확장
