@@ -1,2 +1,4 @@
 //! PinIt core. Pure domain logic and ports. Coordinates are integer DIP.
 pub mod geometry;
+pub mod placement;
+pub mod rng;

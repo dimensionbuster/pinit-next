@@ -12,7 +12,11 @@
 - [x] §1.5 미결 질문 답변 수신·반영 완료
 - [x] 환경 세팅: `pinit-next` 생성(Tauri 2 vanilla-ts), git init(main, 커밋 전), Cargo 워크스페이스(`crates/pinit-core` 순수 코어 + `src-tauri` 어댑터), `docs/DEPENDENCIES.md`, 코어 `geometry::Rect` + 테스트 2개 통과
 - [x] 첫 Tauri 빌드 성공(`cargo build -p pinit-next`, 2m37s, MSVC 링크 OK)
-- [ ] 개발 개시 전 사용자 최종 확인 (사용자가 요청한 보고 시점)
+- [x] 사용자 지시: 스캐폴드 커밋 완료, 이후 순서는 Claude 재량으로 진행, 질문 최소화
+- [x] 코어 `rng`(SplitMix64), `placement`(FrontierPlacement: 앵커 8종 × Grid/Jigsaw, relayout best-of-seeds) + 테스트 13개 통과
+- [ ] **다음(재시작 후 여기서 재개)**: 코어에 `view_state.rs`(zoom/pan/quarter_turns/fine_angle/flip, effective_aspect), `image_ref.rs`(ImageRef + key 정규화), `ports.rs`(DisplayProvider/WindowHost/ImageResolver/LayoutStore), `resolver.rs`(ChainResolver), `service.rs`(OpenService: dedup→resolve→display→place→host→registry, set_view refit, relayout_all) + FakeHost 테스트. 파이프라인 Step 추상화는 YAGNI로 보류(명시적 서비스 + trait 주입/데코레이터)
+- [ ] 이후: Phase 1 스파이크(투명창 20개 메모리, Native Messaging 바이트 전달, 혼합 DPI), DESIGN.md(/design-consultation), 어댑터, UI, 확장
+- 메모: Bash heredoc에 긴 Rust 소스 넣으면 실패 → 파일은 Write 도구 사용
 - [ ] Phase 0 ~ 7 (아래)
 
 ---
