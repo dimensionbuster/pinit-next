@@ -14,7 +14,8 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::adapters::store::Settings;
 use crate::adapters::tauri_host::{id_from_label, ViewJson, ViewerInit};
-use crate::app::{open_in_background, AppState, Msg};
+use crate::adapters::store::{decode_layout, encode_layout};
+use crate::app::{open_in_background, open_saved_in_background, AppState, Msg};
 use crate::cli::is_image_path;
 
 type Res<T> = Result<T, String>;
@@ -130,7 +131,8 @@ pub async fn open_count(state: State<'_, AppState>) -> Res<usize> {
 
 #[tauri::command]
 pub async fn relayout(state: State<'_, AppState>) -> Res<()> {
-    state.service.lock().unwrap().relayout_all();
+    let keep = state.settings.lock().unwrap().relayout_keep_sizes;
+    state.service.lock().unwrap().relayout_all(keep);
     state.send(Msg::Dirty);
     Ok(())
 }
@@ -198,4 +200,44 @@ pub async fn reveal_extension(app: AppHandle) -> Res<()> {
     let dest = crate::paths::Paths::detect().data.join("extension");
     let manifest = crate::extension_bundle::extract(&dest).map_err(|e| e.to_string())?;
     app.opener().reveal_item_in_dir(manifest).map_err(|e| e.to_string())
+}
+
+// ------------------------------------------------------------ .pinit layouts
+
+/// Saves the currently open windows (positions, sizes, views) to a `.pinit` file.
+/// Returns the saved path, or None if the user cancelled.
+#[tauri::command]
+pub async fn export_layout(app: AppHandle, state: State<'_, AppState>) -> Res<Option<String>> {
+    let snapshot = state.service.lock().unwrap().snapshot();
+    if snapshot.is_empty() {
+        return Err("열려 있는 이미지가 없습니다".into());
+    }
+    let name = format!("pinit-layout-{}.pinit", crate::date::today_iso());
+    let target = app
+        .dialog()
+        .file()
+        .set_file_name(name)
+        .add_filter("PinIt 레이아웃", &["pinit"])
+        .add_filter("JSON", &["json"])
+        .blocking_save_file();
+    let Some(path) = target.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    std::fs::write(&path, encode_layout(&snapshot)).map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Opens every window from a `.pinit` file (added to the ones already open).
+/// Returns how many windows the file contained, or None if the user cancelled.
+#[tauri::command]
+pub async fn import_layout(app: AppHandle) -> Res<Option<usize>> {
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("PinIt 레이아웃", &["pinit", "json"])
+        .blocking_pick_file();
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let saved = decode_layout(&bytes).ok_or("올바른 PinIt 레이아웃 파일이 아닙니다")?;
+    let n = saved.len();
+    open_saved_in_background(&app, saved);
+    Ok(Some(n))
 }

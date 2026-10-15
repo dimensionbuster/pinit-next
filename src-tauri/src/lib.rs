@@ -3,6 +3,7 @@ pub mod app;
 pub mod b64;
 pub mod cli;
 pub mod commands;
+pub mod date;
 pub mod extension_bundle;
 pub mod native_host;
 pub mod paths;
@@ -44,7 +45,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 let app = app.clone();
                 std::thread::spawn(move || {
                     let state = app.state::<AppState>();
-                    state.service.lock().unwrap().relayout_all();
+                    let keep = state.settings.lock().unwrap().relayout_keep_sizes;
+                    state.service.lock().unwrap().relayout_all(keep);
                     state.send(Msg::Dirty);
                 });
             }
@@ -128,10 +130,18 @@ pub fn run() {
             let state = AppState::build(&handle)?;
             app.manage(state);
             build_tray(&handle)?;
+            if cfg!(debug_assertions) {
+                if let Some(w) = handle.get_webview_window("main") {
+                    let _ = w.set_title("PinIt (DEV)");
+                }
+            }
 
             // Keep the browser bridge registered (idempotent; follows a moved/updated exe).
-            // PINIT_NO_REGISTER=1 lets test runs avoid hijacking a real installation's registration.
-            if let (Ok(exe), None) = (std::env::current_exe(), std::env::var_os("PINIT_NO_REGISTER")) {
+            // Debug builds skip registration (they would hijack a real install's browser bridge)
+            // unless PINIT_REGISTER=1; PINIT_NO_REGISTER=1 always skips.
+            let register = std::env::var_os("PINIT_NO_REGISTER").is_none()
+                && (!cfg!(debug_assertions) || std::env::var_os("PINIT_REGISTER").is_some());
+            if let (Ok(exe), true) = (std::env::current_exe(), register) {
                 let dir = paths::Paths::detect().data;
                 std::thread::spawn(move || {
                     if let Err(e) = native_host::register(&exe, &dir.join("native-host")) {
@@ -167,6 +177,8 @@ pub fn run() {
             commands::pick_and_open,
             commands::open_paths,
             commands::open_url_text,
+            commands::export_layout,
+            commands::import_layout,
             commands::reveal_extension,
             commands::quit,
         ])

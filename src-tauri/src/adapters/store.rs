@@ -60,6 +60,8 @@ pub struct Settings {
     pub backdrop_color: String,
     /// 0.0 (invisible) ..= 1.0 (opaque).
     pub backdrop_opacity: f64,
+    /// "Re-arrange" keeps each window's current size and only moves them.
+    pub relayout_keep_sizes: bool,
 }
 
 impl Default for Settings {
@@ -77,6 +79,7 @@ impl Default for Settings {
             show_in_taskbar: false,
             backdrop_color: "#000000".into(),
             backdrop_opacity: 0.4,
+            relayout_keep_sizes: false,
         }
     }
 }
@@ -206,23 +209,30 @@ impl SavedDto {
     }
 }
 
+/// Serialises a layout. This is both the on-disk session format and the `.pinit` export format.
+pub fn encode_layout(windows: &[SavedWindow]) -> Vec<u8> {
+    let file = LayoutFile { version: 1, windows: windows.iter().filter_map(SavedDto::from_core).collect() };
+    serde_json::to_vec_pretty(&file).unwrap_or_default()
+}
+
+/// Parses a layout; None for anything that is not a version-1 layout file.
+pub fn decode_layout(bytes: &[u8]) -> Option<Vec<SavedWindow>> {
+    let file: LayoutFile = serde_json::from_slice(bytes).ok()?;
+    (file.version == 1).then(|| file.windows.into_iter().map(SavedDto::into_core).collect())
+}
+
 pub struct JsonLayoutStore {
     pub path: PathBuf,
 }
 
 impl LayoutStore for JsonLayoutStore {
     fn load(&self) -> Vec<SavedWindow> {
-        read_json::<LayoutFile>(&self.path)
-            .map(|f| f.windows.into_iter().map(SavedDto::into_core).collect())
-            .unwrap_or_default()
+        fs::read(&self.path).ok().and_then(|b| decode_layout(&b)).unwrap_or_default()
     }
 
     fn save(&mut self, windows: &[SavedWindow]) {
-        let file = LayoutFile { version: 1, windows: windows.iter().filter_map(SavedDto::from_core).collect() };
-        if let Ok(bytes) = serde_json::to_vec_pretty(&file) {
-            if let Err(e) = write_atomic(&self.path, &bytes) {
-                eprintln!("layout save failed: {e}");
-            }
+        if let Err(e) = write_atomic(&self.path, &encode_layout(windows)) {
+            eprintln!("layout save failed: {e}");
         }
     }
 }
@@ -302,6 +312,20 @@ mod tests {
         ];
         store.save(&saved);
         assert_eq!(store.load(), saved);
+    }
+
+    #[test]
+    fn export_format_round_trips_and_rejects_foreign_files() {
+        let saved = vec![SavedWindow {
+            image: ImageRef::Url { url: "https://e.com/a.jpg".into(), referer: None },
+            bounds: Rect::new(10, 20, 300, 200),
+            view: ViewState::default(),
+        }];
+        assert_eq!(decode_layout(&encode_layout(&saved)), Some(saved));
+        assert_eq!(decode_layout(b"{}"), None);
+        assert_eq!(decode_layout(br#"{"version":2,"windows":[]}"#), None);
+        assert_eq!(decode_layout(b"not json"), None);
+        assert_eq!(decode_layout(br#"{"version":1,"windows":[]}"#), Some(vec![]));
     }
 
     #[test]

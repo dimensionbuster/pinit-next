@@ -9,7 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
-pub const IDENTIFIER: &str = "com.pinit.next";
+/// Debug builds use their own folders so testing never touches (or is polluted by) a real install.
+pub const IDENTIFIER: &str = if cfg!(debug_assertions) { "com.pinit.next.dev" } else { "com.pinit.next" };
 pub const PORTABLE_FLAG: &str = "portable.flag";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

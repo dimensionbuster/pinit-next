@@ -37,6 +37,7 @@ export interface Settings {
   show_in_taskbar: boolean;
   backdrop_color: string;
   backdrop_opacity: number;
+  relayout_keep_sizes: boolean;
 }
 
 export interface DisplayInfo {
@@ -65,6 +66,8 @@ export const ipc = {
   pickAndOpen: () => invoke<number>("pick_and_open"),
   openUrlText: (text: string) => invoke<void>("open_url_text", { text }),
   openPaths: (paths: string[]) => invoke<number>("open_paths", { paths }),
+  exportLayout: () => invoke<string | null>("export_layout"),
+  importLayout: () => invoke<number | null>("import_layout"),
   revealExtension: () => invoke<void>("reveal_extension"),
   quit: () => invoke<void>("quit"),
 };

@@ -276,9 +276,11 @@ impl OpenService {
         Some(fitted)
     }
 
-    /// Re-pack every window per display using the current config. Order of
-    /// opening is the fill order.
-    pub fn relayout_all(&mut self) {
+    /// Re-pack every window per display from the anchor. Opening order is the
+    /// fill order. With `keep_sizes` each window keeps its current width and
+    /// height (only positions change); otherwise sizes are recomputed from the
+    /// image aspect and the configured size rule (best of several seeds).
+    pub fn relayout_all(&mut self, keep_sizes: bool) {
         let displays = self.displays.displays();
         let base_seed = self.rng.next_u64();
         for d in &displays {
@@ -289,14 +291,27 @@ impl OpenService {
                 continue;
             }
             let strategy = self.config.strategy(d.scale);
-            let aspects: Vec<f64> = idx.iter().map(|&i| self.windows[i].aspect()).collect();
-            let placed = relayout(&strategy, d.work_area, &aspects, base_seed..base_seed + RELAYOUT_SEEDS, |s| {
-                Box::new(SplitMix64::new(s))
-            });
-            for (&i, p) in idx.iter().zip(placed) {
-                self.windows[i].bounds = p.rect;
-                self.windows[i].last_fit = p.rect;
-                self.host.set_bounds(self.windows[i].id, p.rect);
+            let rects: Vec<Rect> = if keep_sizes {
+                let mut placed: Vec<Rect> = Vec::with_capacity(idx.len());
+                for &i in &idx {
+                    let b = self.windows[i].bounds;
+                    let r = strategy.place_exact(&placed, d.work_area, b.w, b.h).rect;
+                    placed.push(r);
+                }
+                placed
+            } else {
+                let aspects: Vec<f64> = idx.iter().map(|&i| self.windows[i].aspect()).collect();
+                relayout(&strategy, d.work_area, &aspects, base_seed..base_seed + RELAYOUT_SEEDS, |s| {
+                    Box::new(SplitMix64::new(s))
+                })
+                .into_iter()
+                .map(|p| p.rect)
+                .collect()
+            };
+            for (&i, rect) in idx.iter().zip(rects) {
+                self.windows[i].bounds = rect;
+                self.windows[i].last_fit = rect;
+                self.host.set_bounds(self.windows[i].id, rect);
             }
         }
     }
@@ -516,6 +531,30 @@ mod tests {
     }
 
     #[test]
+    fn relayout_can_keep_hand_chosen_sizes() {
+        let (mut svc, log) = service(None, None);
+        svc.open(req("a")).unwrap();
+        svc.open(req("b")).unwrap();
+        svc.open(req("c")).unwrap();
+        // user reshaped windows by hand (not the grid line, not the image aspect)
+        svc.on_bounds_changed(1, Rect::new(500, 500, 420, 180));
+        svc.on_bounds_changed(2, Rect::new(900, 100, 250, 640));
+        svc.on_bounds_changed(3, Rect::new(10, 700, 333, 333));
+        svc.relayout_all(true);
+        {
+            let l = log.lock().unwrap();
+            let last: Vec<(WindowId, Rect)> = l.bounds.iter().rev().take(3).rev().cloned().collect();
+            assert_eq!(last[0], (1, Rect::new(0, 0, 420, 180)));
+            assert_eq!(last[1], (2, Rect::new(420, 0, 250, 640)));
+            assert_eq!(last[2], (3, Rect::new(670, 0, 333, 333)));
+        }
+        // default relayout still normalises sizes to the grid line
+        svc.relayout_all(false);
+        let l = log.lock().unwrap();
+        assert!(l.bounds.iter().rev().take(3).all(|(_, r)| r.h == 300));
+    }
+
+    #[test]
     fn grid_line_is_dip_scaled_per_display() {
         let log = Arc::new(Mutex::new(HostLog::default()));
         let mut displays = two_displays();
@@ -544,7 +583,7 @@ mod tests {
         svc.open(req("c")).unwrap();
         svc.on_closed(1);
         assert_eq!(svc.open_count(), 2);
-        svc.relayout_all();
+        svc.relayout_all(false);
         let moved: Vec<(WindowId, Rect)> = log.lock().unwrap().bounds.clone();
         assert_eq!(moved, vec![(2, Rect::new(0, 0, 300, 300)), (3, Rect::new(300, 0, 300, 300))]);
     }

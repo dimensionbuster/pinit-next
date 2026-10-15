@@ -88,9 +88,28 @@ impl TauriHost {
     }
 }
 
+/// Moves/resizes a window to exact physical bounds, even across monitors with
+/// different DPI scales.
+///
+/// Moving a window onto a monitor with another scale makes Windows rescale it
+/// (WM_DPICHANGED), e.g. a 480x300 window sent from a 150% to a 100% monitor
+/// ends up 320x200. So: position first, then size, and re-apply until the
+/// window reports what we asked for. Never call this from the UI thread.
 fn apply_bounds(w: &tauri::WebviewWindow, b: Rect) {
-    let _ = w.set_size(PhysicalSize::new(b.w.max(1) as u32, b.h.max(1) as u32));
-    let _ = w.set_position(PhysicalPosition::new(b.x, b.y));
+    let pos = PhysicalPosition::new(b.x, b.y);
+    let size = PhysicalSize::new(b.w.max(1) as u32, b.h.max(1) as u32);
+    for _ in 0..6 {
+        let _ = w.set_position(pos);
+        let _ = w.set_size(size);
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        let settled = matches!(
+            (w.outer_position(), w.outer_size()),
+            (Ok(p), Ok(s)) if p == pos && s == size
+        );
+        if settled {
+            return;
+        }
+    }
 }
 
 impl WindowHost for TauriHost {

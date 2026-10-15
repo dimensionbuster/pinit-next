@@ -152,7 +152,13 @@ export class ArrangeSection extends BaseSection {
       ),
     );
 
-    return card("배치", mode, size, anchor, display);
+    const keep = field(
+      "다시 정렬 시 현재 크기 유지",
+      "켜면 창 크기는 그대로 두고 위치만 시작 모서리부터 다시 채웁니다.",
+      toggle(s.relayout_keep_sizes, "다시 정렬 시 현재 크기 유지", (v) => m.patch({ relayout_keep_sizes: v })),
+    );
+
+    return card("배치", mode, size, anchor, display, keep);
   }
 }
 
@@ -197,6 +203,34 @@ function anchorPicker(current: Corner, onPick: (c: Corner) => void): HTMLElement
       h("button", { class: `corner ${c}`, type: "button", title: label, "aria-label": label, "aria-pressed": c === current, onClick: () => onPick(c) }),
     ),
   );
+}
+
+export class LayoutSection extends BaseSection {
+  protected build(): HTMLElement {
+    const n = this.model.openCount;
+    const run = async (job: () => Promise<string | number | null>, ok: (r: string | number) => string) => {
+      try {
+        const r = await job();
+        if (r !== null) toast(ok(r));
+      } catch (e) {
+        toast(String(e));
+      }
+      await this.model.refresh();
+    };
+    return card(
+      "레이아웃",
+      field(
+        "저장 / 불러오기",
+        "열려 있는 이미지와 위치·크기·보기 상태를 .pinit 파일로 저장하고, 나중에 불러옵니다.",
+        h(
+          "div",
+          { class: "row" },
+          h("button", { class: "btn", type: "button", disabled: n === 0, onClick: () => void run(() => ipc.exportLayout(), (p) => `저장했습니다: ${p}`) }, icon("download"), "저장"),
+          h("button", { class: "btn", type: "button", onClick: () => void run(() => ipc.importLayout(), (c) => `${c}개 창을 불러옵니다`) }, icon("upload"), "불러오기"),
+        ),
+      ),
+    );
+  }
 }
 
 export class BrowserSection extends BaseSection {

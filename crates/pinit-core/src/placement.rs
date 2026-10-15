@@ -171,12 +171,7 @@ impl PlacementStrategy for FrontierPlacement {
         let frame = Frame::new(req.area, self.anchor);
         let area = frame.canon_area();
         let aspect = if frame.transpose { 1.0 / req.aspect } else { req.aspect };
-        let obstacles: Vec<Rect> = req
-            .existing
-            .iter()
-            .filter(|r| r.intersects(&req.area))
-            .map(|r| frame.to_canon(r))
-            .collect();
+        let obstacles = canon_obstacles(&frame, req);
 
         // Target size (canonical), chosen once so rng consumption is fixed.
         let (tw, th, min_h) = match self.rule {
@@ -198,34 +193,71 @@ impl PlacementStrategy for FrontierPlacement {
                 (w, h, floor.max(MIN_DIM.min(h)))
             }
         };
+        scan(&frame, &area, &obstacles, req.existing.len(), tw, th, min_h, aspect)
+    }
+}
 
-        let mut xs: Vec<i32> = vec![0];
-        let mut ys: Vec<i32> = vec![0];
-        for o in &obstacles {
-            xs.extend([o.x, o.right()]);
-            ys.extend([o.y, o.bottom()]);
-        }
-        xs.retain(|&x| (0..area.w).contains(&x));
-        ys.retain(|&y| (0..area.h).contains(&y));
-        xs.sort_unstable();
-        xs.dedup();
-        ys.sort_unstable();
-        ys.dedup();
+impl FrontierPlacement {
+    /// Place a window of an exact size (no size rule, no shrinking): used when
+    /// re-arranging windows whose size the user chose. Oversized windows are
+    /// scaled down (aspect kept) to fit the area.
+    pub fn place_exact(&self, existing: &[Rect], area: Rect, w: i32, h: i32) -> Placement {
+        let frame = Frame::new(area, self.anchor);
+        let canon = frame.canon_area();
+        let (cw, ch) = if frame.transpose { (h, w) } else { (w, h) };
+        let (cw, ch) = clamp_to(cw.max(1), ch.max(1), canon.w, canon.h);
+        let aspect = cw as f64 / ch as f64;
+        let req = PlacementRequest { existing, area, aspect: 1.0 };
+        let obstacles = canon_obstacles(&frame, &req);
+        scan(&frame, &canon, &obstacles, existing.len(), cw, ch, ch, aspect)
+    }
+}
 
-        // Fill order: nearest the anchor line first, then along the line.
-        for &y in &ys {
-            for &x in &xs {
-                if let Some(r) = fit_at(&area, &obstacles, x, y, tw, th, min_h, aspect) {
-                    return Placement { rect: frame.to_real(&r), overflowed: false };
-                }
+fn canon_obstacles(frame: &Frame, req: &PlacementRequest) -> Vec<Rect> {
+    req.existing
+        .iter()
+        .filter(|r| r.intersects(&req.area))
+        .map(|r| frame.to_canon(r))
+        .collect()
+}
+
+/// Scan candidate spots in fill order (nearest the anchor first).
+#[allow(clippy::too_many_arguments)]
+fn scan(
+    frame: &Frame,
+    area: &Rect,
+    obstacles: &[Rect],
+    existing_count: usize,
+    tw: i32,
+    th: i32,
+    min_h: i32,
+    aspect: f64,
+) -> Placement {
+    let mut xs: Vec<i32> = vec![0];
+    let mut ys: Vec<i32> = vec![0];
+    for o in obstacles {
+        xs.extend([o.x, o.right()]);
+        ys.extend([o.y, o.bottom()]);
+    }
+    xs.retain(|&x| (0..area.w).contains(&x));
+    ys.retain(|&y| (0..area.h).contains(&y));
+    xs.sort_unstable();
+    xs.dedup();
+    ys.sort_unstable();
+    ys.dedup();
+
+    for &y in &ys {
+        for &x in &xs {
+            if let Some(r) = fit_at(area, obstacles, x, y, tw, th, min_h, aspect) {
+                return Placement { rect: frame.to_real(&r), overflowed: false };
             }
         }
-
-        // Nothing fits: cascade over the existing windows.
-        let off = CASCADE_STEP * (req.existing.len() as i32 % 10);
-        let (w, h) = clamp_to(tw, th, (area.w - off).max(1), (area.h - off).max(1));
-        Placement { rect: frame.to_real(&Rect::new(off, off, w, h)), overflowed: true }
     }
+
+    // Nothing fits: cascade over the existing windows.
+    let off = CASCADE_STEP * (existing_count as i32 % 10);
+    let (w, h) = clamp_to(tw, th, (area.w - off).max(1), (area.h - off).max(1));
+    Placement { rect: frame.to_real(&Rect::new(off, off, w, h)), overflowed: true }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -471,6 +503,31 @@ mod tests {
             println!("seed {seed}: waste ratio {ratio:.3}");
             assert!(ratio < 0.45, "seed {seed}: waste ratio {ratio:.3}");
         }
+    }
+
+    #[test]
+    fn place_exact_keeps_size_and_never_overlaps_for_all_anchors() {
+        let sizes = [(500, 200), (200, 500), (333, 333), (640, 360), (180, 240), (400, 400)];
+        for anchor in Anchor::ALL {
+            let s = FrontierPlacement::new(anchor, SizeRule::Grid { line: 300 });
+            let mut rects: Vec<Rect> = vec![];
+            for &(w, h) in &sizes {
+                let p = s.place_exact(&rects, AREA, w, h);
+                assert!(!p.overflowed, "{anchor:?}");
+                assert_eq!((p.rect.w, p.rect.h), (w, h), "{anchor:?} size changed");
+                assert!(AREA.contains(&p.rect), "{anchor:?}");
+                assert!(rects.iter().all(|r| !r.intersects(&p.rect)), "{anchor:?} overlap");
+                rects.push(p.rect);
+            }
+        }
+    }
+
+    #[test]
+    fn place_exact_scales_down_only_when_larger_than_the_area() {
+        let s = FrontierPlacement::new(Anchor::ALL[0], SizeRule::Grid { line: 300 });
+        let p = s.place_exact(&[], AREA, 4000, 2000);
+        assert!(AREA.contains(&p.rect));
+        assert!((p.rect.w as f64 / p.rect.h as f64 - 2.0).abs() < 0.02);
     }
 
     #[test]

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use pinit_core::geometry::Rect;
 use pinit_core::image_ref::ImageRef;
-use pinit_core::ports::{ImageResolver, LayoutStore, WindowId};
+use pinit_core::ports::{ImageResolver, LayoutStore, SavedWindow, WindowId};
 use pinit_core::resolver::ChainResolver;
 use pinit_core::rng::SplitMix64;
 use pinit_core::service::{OpenOutcome, OpenService, Restore};
@@ -159,12 +159,15 @@ pub fn open_in_background(app: &AppHandle, images: Vec<ImageRef>) {
     });
 }
 
-/// Re-open windows saved by the previous session.
-pub fn restore_saved(app: &AppHandle) {
+/// Open saved windows (session restore or an imported `.pinit`) at their saved
+/// place and view; spots that are no longer on a screen are re-placed automatically.
+pub fn open_saved_in_background(app: &AppHandle, saved: Vec<SavedWindow>) {
+    if saved.is_empty() {
+        return;
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         let state = app.state::<AppState>();
-        let saved = state.layout.lock().unwrap().load();
         for w in saved {
             let restore = Restore { bounds: w.bounds, view: w.view };
             if let Err(e) = state.open_one(w.image, Some(restore)) {
@@ -172,6 +175,12 @@ pub fn restore_saved(app: &AppHandle) {
             }
         }
     });
+}
+
+/// Re-open windows saved by the previous session.
+pub fn restore_saved(app: &AppHandle) {
+    let saved = app.state::<AppState>().layout.lock().unwrap().load();
+    open_saved_in_background(app, saved);
 }
 
 pub fn set_quitting(app: &AppHandle) {
