@@ -87,7 +87,10 @@ pub fn run() {
     // One shared renderer for all same-origin image windows (see docs/SPIKES.md:
     // 20 windows 1.3 GB -> 0.4 GB). Must be set before any webview exists.
     // SAFETY: called once at startup before other threads are spawned.
-    unsafe { std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--process-per-site") };
+    unsafe {
+        let extra = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{extra} --process-per-site"));
+    }
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -120,6 +123,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::viewer_init,
             commands::viewer_set_view,
+            commands::viewer_fit,
             commands::viewer_close,
             commands::viewer_open_source,
             commands::viewer_save_as,
@@ -130,6 +134,7 @@ pub fn run() {
             commands::relayout,
             commands::close_all,
             commands::pick_and_open,
+            commands::open_paths,
             commands::open_url_text,
             commands::quit,
         ])

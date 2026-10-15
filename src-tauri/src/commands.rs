@@ -36,6 +36,13 @@ pub fn viewer_set_view(window: WebviewWindow, view: ViewJson, state: State<AppSt
 }
 
 #[tauri::command]
+pub fn viewer_fit(window: WebviewWindow, state: State<AppState>) -> Res<()> {
+    let id = id_from_label(window.label()).ok_or("not a viewer window")?;
+    state.service.lock().unwrap().fit_to_aspect(id);
+    Ok(())
+}
+
+#[tauri::command]
 pub fn viewer_close(window: WebviewWindow) {
     let _ = window.close();
 }
@@ -146,6 +153,19 @@ pub async fn pick_and_open(app: AppHandle) -> Res<usize> {
     let n = images.len();
     open_in_background(&app, images);
     Ok(n)
+}
+
+#[tauri::command]
+pub fn open_paths(paths: Vec<String>, app: AppHandle) -> usize {
+    let images: Vec<ImageRef> = paths
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .filter(|p| is_image_path(p) && p.is_file())
+        .map(ImageRef::File)
+        .collect();
+    let n = images.len();
+    open_in_background(&app, images);
+    n
 }
 
 #[tauri::command]

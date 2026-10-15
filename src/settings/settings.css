@@ -1,0 +1,51 @@
+.page { max-width: 720px; margin: 0 auto; padding: 24px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
+
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 4px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--accent); color: var(--accent-fg); }
+.logo .icon { width: 20px; height: 20px; }
+
+.section-title { color: var(--text-muted); font-weight: 600; text-transform: none; }
+.field { gap: 24px; min-height: 36px; }
+.field > :first-child { min-width: 0; }
+.field .caption { margin-top: 2px; }
+.field > :last-child { flex: none; }
+.field input[type="range"] { width: 200px; }
+
+.dropzone {
+  display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: var(--r-md);
+  border: 1px dashed var(--border-strong); color: var(--text-muted);
+}
+.dropzone > div { flex: 1; color: var(--text); }
+.dropzone .icon { width: 22px; height: 22px; color: var(--text-muted); }
+
+.drop-overlay {
+  position: fixed; inset: 8px; display: grid; place-items: center; border-radius: var(--r-md);
+  border: 2px dashed var(--accent); background: var(--accent-soft); color: var(--accent);
+  font-size: 16px; font-weight: 600; pointer-events: none; z-index: 40;
+}
+.drop-overlay[hidden] { display: none; }
+
+.num { width: 76px; }
+.select { width: 260px; }
+
+.anchor-picker {
+  position: relative; width: 72px; height: 46px; border-radius: 6px;
+  border: 1px solid var(--border-strong); background: var(--surface-2);
+}
+.anchor-picker .corner {
+  position: absolute; width: 14px; height: 14px; padding: 0; border-radius: 4px;
+  border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.anchor-picker .corner:hover { border-color: var(--accent); }
+.anchor-picker .corner[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+.corner.topleft { top: 4px; left: 4px; }
+.corner.topright { top: 4px; right: 4px; }
+.corner.bottomleft { bottom: 4px; left: 4px; }
+.corner.bottomright { bottom: 4px; right: 4px; }
+
+@media (max-width: 640px) {
+  .field { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .page-head { flex-direction: column; align-items: flex-start; }
+}

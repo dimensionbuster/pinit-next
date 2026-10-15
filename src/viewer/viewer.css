@@ -1,0 +1,66 @@
+/* Viewer windows are transparent; overlays are always dark glass (they sit on arbitrary images). */
+html, body { background: transparent; overflow: hidden; user-select: none; }
+#root { position: fixed; inset: 0; }
+
+.stage { position: absolute; inset: 0; overflow: hidden; cursor: grab; background: transparent; }
+.stage.pan-mode { cursor: move; }
+.image {
+  /* centred with the standalone `translate` property so `transform` stays flip/rotate/zoom/pan only */
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  display: block; object-fit: contain; pointer-events: none;
+  transform-origin: center; will-change: transform; image-rendering: auto;
+}
+.status {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  padding: 8px 12px; border-radius: var(--r-sm); background: rgba(20, 22, 26, 0.8); color: #eceef1;
+}
+
+.overlay {
+  --glass: rgba(20, 22, 26, 0.72);
+  position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity var(--t-med);
+}
+#root:hover .overlay, #root:focus-within .overlay { opacity: 1; }
+
+.tb-btn {
+  display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0;
+  border-radius: 8px; background: transparent; color: #eceef1; cursor: pointer; pointer-events: auto;
+  transition: background var(--t-fast);
+}
+.tb-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.tb-btn:active { background: rgba(255, 255, 255, 0.22); }
+.tb-btn:focus-visible { box-shadow: 0 0 0 2px #8195ff; }
+.tb-btn.close {
+  position: absolute; top: 8px; right: 8px; background: var(--glass);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.tb-btn.close:hover { background: rgba(214, 64, 58, 0.85); }
+
+.pill {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px;
+  max-width: calc(100% - 16px); padding: 4px; border-radius: 12px; pointer-events: auto;
+  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.sep { width: 1px; height: 16px; margin: 0 3px; background: rgba(255, 255, 255, 0.16); }
+
+.angle-chip {
+  position: absolute; top: 8px; left: 8px; height: 28px; padding: 0 10px; border: 0;
+  border-radius: 999px; background: var(--glass); color: #eceef1; font-size: 12px;
+  font-variant-numeric: tabular-nums; cursor: pointer; pointer-events: auto;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.angle-chip[hidden] { display: none; }
+
+/* invisible resize grips */
+.grips { position: absolute; inset: 0; pointer-events: none; }
+.grip { position: absolute; pointer-events: auto; }
+.grip.north, .grip.south { left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.grip.east, .grip.west { top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+.grip.north { top: 0; } .grip.south { bottom: 0; }
+.grip.east { right: 0; } .grip.west { left: 0; }
+.grip.northeast, .grip.northwest, .grip.southeast, .grip.southwest { width: 12px; height: 12px; }
+.grip.northeast { top: 0; right: 0; cursor: nesw-resize; }
+.grip.southwest { bottom: 0; left: 0; cursor: nesw-resize; }
+.grip.northwest { top: 0; left: 0; cursor: nwse-resize; }
+.grip.southeast { bottom: 0; right: 0; cursor: nwse-resize; }

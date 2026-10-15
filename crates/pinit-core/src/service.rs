@@ -89,6 +89,9 @@ struct Entry {
     image: ImageRef,
     display_id: DisplayId,
     bounds: Rect,
+    /// Last bounds the service itself set (open/refit/relayout/fit); lets
+    /// `fit_to_aspect` tell which side the user dragged.
+    last_fit: Rect,
     view: ViewState,
     natural_aspect: f64,
 }
@@ -192,6 +195,7 @@ impl OpenService {
             image: persistable(&resolved),
             display_id,
             bounds,
+            last_fit: bounds,
             view,
             natural_aspect,
         });
@@ -232,8 +236,43 @@ impl OpenService {
             .unwrap_or(e.bounds);
         let refit = refit(e.bounds, new_aspect, area);
         e.bounds = refit;
+        e.last_fit = refit;
         self.host.set_bounds(id, refit);
         Some(refit)
+    }
+
+    /// After a user resize: snap back to the image aspect, keeping the side the
+    /// user changed most. Returns the new bounds, or None if already fitting.
+    pub fn fit_to_aspect(&mut self, id: WindowId) -> Option<Rect> {
+        let displays = self.displays.displays();
+        let e = self.windows.iter_mut().find(|e| e.id == id)?;
+        let aspect = e.aspect();
+        let b = e.bounds;
+        if ((b.w as f64 / b.h as f64) - aspect).abs() * (b.h as f64) < 1.5 {
+            e.last_fit = b;
+            return None;
+        }
+        let keep_width = (b.w - e.last_fit.w).abs() >= (b.h - e.last_fit.h).abs();
+        let (mut w, mut h) = if keep_width {
+            (b.w, ((b.w as f64) / aspect).round() as i32)
+        } else {
+            (((b.h as f64) * aspect).round() as i32, b.h)
+        };
+        let area = displays
+            .iter()
+            .find(|d| d.id == e.display_id)
+            .map(|d| d.work_area)
+            .unwrap_or(b);
+        let (cw, ch) = clamp_aspect(w, h, area.w, area.h);
+        w = cw;
+        h = ch;
+        let x = b.x.clamp(area.x, (area.right() - w).max(area.x));
+        let y = b.y.clamp(area.y, (area.bottom() - h).max(area.y));
+        let fitted = Rect::new(x, y, w.max(1), h.max(1));
+        e.bounds = fitted;
+        e.last_fit = fitted;
+        self.host.set_bounds(id, fitted);
+        Some(fitted)
     }
 
     /// Re-pack every window per display using the current config. Order of
@@ -255,6 +294,7 @@ impl OpenService {
             });
             for (&i, p) in idx.iter().zip(placed) {
                 self.windows[i].bounds = p.rect;
+                self.windows[i].last_fit = p.rect;
                 self.host.set_bounds(self.windows[i].id, p.rect);
             }
         }
@@ -301,6 +341,11 @@ pub fn display_for_rect<'a>(displays: &'a [Display], r: &Rect) -> Option<&'a Dis
         .filter(|(_, a)| *a > 0)
         .max_by_key(|(_, a)| *a)
         .map(|(d, _)| d)
+}
+
+fn clamp_aspect(w: i32, h: i32, max_w: i32, max_h: i32) -> (i32, i32) {
+    let k = (max_w as f64 / w as f64).min(max_h as f64 / h as f64).min(1.0);
+    (((w as f64) * k).round() as i32, ((h as f64) * k).round() as i32)
 }
 
 /// Resize to `aspect` keeping (approximately) the same area and the same
@@ -515,6 +560,31 @@ mod tests {
         // free-angle rotation never resizes
         v.set_fine_angle(20.0);
         assert!(svc.set_view(1, v).is_none());
+    }
+
+    #[test]
+    fn fit_to_aspect_follows_the_side_the_user_changed() {
+        let (mut svc, log) = service(None, None);
+        svc.open(req("wide")).unwrap(); // 600x300
+        // user widened the window to 800x300 -> keep width, height follows (400)
+        svc.on_bounds_changed(1, Rect::new(0, 0, 800, 300));
+        assert_eq!(svc.fit_to_aspect(1), Some(Rect::new(0, 0, 800, 400)));
+        assert_eq!(log.lock().unwrap().bounds.last().map(|b| b.1), Some(Rect::new(0, 0, 800, 400)));
+        // user then made it taller: 800x600 -> keep height, width follows (1200)
+        svc.on_bounds_changed(1, Rect::new(0, 0, 800, 600));
+        assert_eq!(svc.fit_to_aspect(1), Some(Rect::new(0, 0, 1200, 600)));
+        // already fitting: no-op
+        svc.on_bounds_changed(1, Rect::new(0, 0, 1200, 600));
+        assert_eq!(svc.fit_to_aspect(1), None);
+    }
+
+    #[test]
+    fn fit_to_aspect_never_leaves_the_work_area() {
+        let (mut svc, _) = service(None, None);
+        svc.open(req("wide")).unwrap();
+        svc.on_bounds_changed(1, Rect::new(1200, 700, 700, 200));
+        let r = svc.fit_to_aspect(1).unwrap();
+        assert!(Rect::new(0, 0, 1920, 1040).contains(&r), "{r:?}");
     }
 
     #[test]

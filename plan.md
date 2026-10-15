@@ -17,7 +17,8 @@
 - [x] 코어 완성(테스트 36개 통과): `view_state`, `image_ref`(key 정규화), `ports`, `resolver`(ChainResolver), `service`(OpenService: dedup→resolve→display→place→host, set_view refit, relayout_all, snapshot/restore). 파이프라인 Step 추상화는 YAGNI로 보류(명시적 서비스 + trait 주입/데코레이터)
 - [x] 스파이크 1·2 완료 → `docs/SPIKES.md`. **중요**: 기본 설정 Tauri는 Electron 대비 메모리 이득 없음(20창: Tauri 1049MB private vs Electron 706MB). `--process-per-site`로 20창이 7프로세스/working set 410MB로 감소(Electron 1626MB) → 앱은 필수 적용. 지오메트리를 물리 px로 변경(`Display.scale`, DIP→px는 배치 시 디스플레이별 변환)
 - [x] 어댑터/컴포지션 루트 완료(컴파일·단위테스트 통과): resolvers(File/Bytes/Url+디스크 캐시, Referer), store(settings/layout JSON 원자적 저장), displays, tauri_host(투명·프레임리스 창, asset 스코프 최소권한), cli(인자 파싱), app(AppState, 이벤트 펌프 스레드로 데드락 방지, 종료 시 레이아웃 보존), commands(IPC), 트레이, 단일 인스턴스, `--process-per-site`
-- [ ] **다음**: 프런트엔드(viewer.html / index.html, DESIGN.md 토큰, SVG 아이콘, 다크/라이트), 그 다음 확장 + Native Messaging 호스트(`chrome-extension://` 인자 감지), 패키징(NSIS, 파일 연결)
+- [x] 프런트엔드 완료·실동작 검증(CDP로 웹뷰 내용만 캡처): DESIGN.md + design.css 토큰, SVG 아이콘, 뷰어(줌/팬/90°·자유각 회전/반전, 창 비율 자동 맞춤, 리사이즈 그립), 설정창(배치 격자/자율, 앵커 선택, 디스플레이, 다크/라이트/시스템). 회전 시 창이 비율에 맞게 즉시 바뀌고 이미지 변환 순서 정확함 확인. 앱 실행 시 레이아웃 복원·저장 확인
+- [ ] **다음**: 확장 + Native Messaging 호스트(`chrome-extension://` 인자 감지), 패키징(NSIS, 파일 연결)
 - [ ] (보류) Phase 1 잔여 스파이크(Native Messaging 바이트 전달, 투명창 드래그·자유각도 회전)
 - [ ] (원 항목)(투명창 20개 메모리, Native Messaging 바이트 전달, 혼합 DPI), DESIGN.md(/design-consultation), 어댑터, UI, 확장
 - 메모: Bash heredoc에 긴 Rust 소스 넣으면 실패 → 파일은 Write 도구 사용
