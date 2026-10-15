@@ -4,7 +4,7 @@ pub struct Point {
     pub y: i32,
 }
 
-/// Axis-aligned rectangle in integer DIP (device-independent pixels).
+/// Axis-aligned rectangle in integer physical pixels of the virtual desktop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub x: i32,

@@ -15,7 +15,9 @@
 - [x] 사용자 지시: 스캐폴드 커밋 완료, 이후 순서는 Claude 재량으로 진행, 질문 최소화
 - [x] 코어 `rng`(SplitMix64), `placement`(FrontierPlacement: 앵커 8종 × Grid/Jigsaw, relayout best-of-seeds) + 테스트 13개 통과
 - [x] 코어 완성(테스트 36개 통과): `view_state`, `image_ref`(key 정규화), `ports`, `resolver`(ChainResolver), `service`(OpenService: dedup→resolve→display→place→host, set_view refit, relayout_all, snapshot/restore). 파이프라인 Step 추상화는 YAGNI로 보류(명시적 서비스 + trait 주입/데코레이터)
-- [ ] **다음**: Phase 1 스파이크(투명창 20개 메모리, Native Messaging 바이트 전달, 혼합 DPI), DESIGN.md(/design-consultation), 어댑터, UI, 확장
+- [x] 스파이크 1·2 완료 → `docs/SPIKES.md`. **중요**: 기본 설정 Tauri는 Electron 대비 메모리 이득 없음(20창: Tauri 1049MB private vs Electron 706MB). `--process-per-site`로 20창이 7프로세스/working set 410MB로 감소(Electron 1626MB) → 앱은 필수 적용. 지오메트리를 물리 px로 변경(`Display.scale`, DIP→px는 배치 시 디스플레이별 변환)
+- [ ] **다음**: Phase 1 잔여 스파이크(Native Messaging 바이트 전달, 투명창 드래그·자유각도 회전)
+- [ ] (원 항목)(투명창 20개 메모리, Native Messaging 바이트 전달, 혼합 DPI), DESIGN.md(/design-consultation), 어댑터, UI, 확장
 - 메모: Bash heredoc에 긴 Rust 소스 넣으면 실패 → 파일은 Write 도구 사용
 - [ ] Phase 0 ~ 7 (아래)
 

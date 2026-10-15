@@ -31,11 +31,14 @@ pub struct LayoutConfig {
 }
 
 impl LayoutConfig {
-    pub fn strategy(&self) -> FrontierPlacement {
+    /// Strategy for a display with `scale` physical px per DIP: configured
+    /// sizes are DIP, placement runs in physical pixels.
+    pub fn strategy(&self, scale: f64) -> FrontierPlacement {
+        let px = |dip: i32| ((dip as f64) * scale).round() as i32;
         let rule = match self.mode {
-            LayoutMode::Grid { line } => SizeRule::Grid { line },
+            LayoutMode::Grid { line } => SizeRule::Grid { line: px(line) },
             LayoutMode::Jigsaw { base, min_scale, max_scale } => {
-                SizeRule::Jigsaw { base, min_scale, max_scale }
+                SizeRule::Jigsaw { base: px(base), min_scale, max_scale }
             }
         };
         FrontierPlacement::new(self.anchor, rule)
@@ -153,7 +156,7 @@ impl OpenService {
                     .filter(|e| e.display_id == d.id)
                     .map(|e| e.bounds)
                     .collect();
-                let p = self.config.strategy().place(
+                let p = self.config.strategy(d.scale).place(
                     &PlacementRequest { existing: &obstacles, area: d.work_area, aspect },
                     self.rng.as_mut(),
                 );
@@ -219,7 +222,6 @@ impl OpenService {
     /// opening is the fill order.
     pub fn relayout_all(&mut self) {
         let displays = self.displays.displays();
-        let strategy = self.config.strategy();
         let base_seed = self.rng.next_u64();
         for d in &displays {
             let idx: Vec<usize> = (0..self.windows.len())
@@ -228,6 +230,7 @@ impl OpenService {
             if idx.is_empty() {
                 continue;
             }
+            let strategy = self.config.strategy(d.scale);
             let aspects: Vec<f64> = idx.iter().map(|&i| self.windows[i].aspect()).collect();
             let placed = relayout(&strategy, d.work_area, &aspects, base_seed..base_seed + RELAYOUT_SEEDS, |s| {
                 Box::new(SplitMix64::new(s))
@@ -367,12 +370,14 @@ mod tests {
                 id: 1,
                 bounds: Rect::new(0, 0, 1920, 1080),
                 work_area: Rect::new(0, 0, 1920, 1040),
+                scale: 1.0,
                 is_primary: true,
             },
             Display {
                 id: 2,
                 bounds: Rect::new(1920, 0, 1920, 1080),
                 work_area: Rect::new(1920, 0, 1920, 1080),
+                scale: 1.0,
                 is_primary: false,
             },
         ]
@@ -437,6 +442,27 @@ mod tests {
         let l = log.borrow();
         assert_eq!(l.opened[0].bounds, Rect::new(1920, 0, 300, 300));
         assert_eq!(l.opened[1].bounds, Rect::new(2220, 0, 300, 300));
+    }
+
+    #[test]
+    fn grid_line_is_dip_scaled_per_display() {
+        let log = Rc::new(RefCell::new(HostLog::default()));
+        let mut displays = two_displays();
+        displays[1].scale = 1.5;
+        let mut svc = OpenService::new(
+            Box::new(FakeResolver),
+            Box::new(FakeHost(log.clone())),
+            Box::new(FakeDisplays(displays, Some(Point { x: 2500, y: 100 }))),
+            Box::new(SplitMix64::new(1)),
+            LayoutConfig {
+                anchor: Anchor { corner: Corner::TopLeft, flow: Flow::Rows },
+                mode: LayoutMode::Grid { line: 300 },
+                preferred_display: None,
+            },
+        );
+        svc.open(req("a")).unwrap();
+        // 300 DIP * 1.5 = 450 physical px on the HiDPI display
+        assert_eq!(log.borrow().opened[0].bounds, Rect::new(1920, 0, 450, 450));
     }
 
     #[test]

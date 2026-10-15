@@ -1,4 +1,6 @@
-//! PinIt core. Pure domain logic and ports. Coordinates are integer DIP.
+//! PinIt core. Pure domain logic and ports. All geometry is integer *physical* pixels
+//! of the virtual desktop (one linear space across mixed-DPI monitors); user-facing
+//! sizes are DIP and are multiplied by the target display scale before placement.
 pub mod geometry;
 pub mod image_ref;
 pub mod placement;

@@ -11,12 +11,14 @@ use crate::view_state::ViewState;
 pub type WindowId = u64;
 pub type DisplayId = u64;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Display {
     pub id: DisplayId,
     pub bounds: Rect,
-    /// Area usable by windows (excludes taskbar etc.), in DIP.
+    /// Area usable by windows (excludes taskbar etc.), in physical pixels.
     pub work_area: Rect,
+    /// Physical pixels per DIP on this display (1.0 = 100%).
+    pub scale: f64,
     pub is_primary: bool,
 }
 
