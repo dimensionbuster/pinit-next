@@ -80,6 +80,54 @@ pub async fn viewer_save_as(window: WebviewWindow, app: AppHandle, state: State<
     }
 }
 
+/// `dir/name`, or `dir/stem (n).ext` when that already exists.
+fn unique_target(dir: &std::path::Path, name: &std::ffi::OsStr) -> std::path::PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let p = std::path::Path::new(name);
+    let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    (2..)
+        .map(|n| dir.join(format!("{stem} ({n}){ext}")))
+        .find(|c| !c.exists())
+        .expect("unbounded range")
+}
+
+/// Asks for a folder and copies every open window's image into it.
+/// Returns the number saved and the folder, or None if the user cancelled.
+/// Blocks on a dialog: call from an async command or a worker thread, never the UI thread.
+pub fn save_all_open(app: &AppHandle) -> Res<Option<(usize, String)>> {
+    let state = app.state::<AppState>();
+    let mut sources: Vec<std::path::PathBuf> =
+        state.registry.lock().unwrap().values().map(|i| i.path.clone()).collect();
+    if sources.is_empty() {
+        return Err("열려 있는 이미지가 없습니다".into());
+    }
+    sources.sort();
+    sources.dedup();
+    let Some(dir) = app.dialog().file().blocking_pick_folder().and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let mut saved = 0;
+    for src in &sources {
+        let Some(name) = src.file_name() else { continue };
+        if std::fs::copy(src, unique_target(&dir, name)).is_ok() {
+            saved += 1;
+        }
+    }
+    if saved == 0 {
+        return Err("이미지를 저장하지 못했습니다".into());
+    }
+    Ok(Some((saved, dir.to_string_lossy().into_owned())))
+}
+
+#[tauri::command]
+pub async fn save_all(app: AppHandle) -> Res<Option<usize>> {
+    save_all_open(&app).map(|r| r.map(|(n, _)| n))
+}
+
 // ---------------------------------------------------------------- settings
 
 #[tauri::command]

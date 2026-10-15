@@ -7,7 +7,7 @@ const page = (name: string) => fileURLToPath(new URL(name, import.meta.url));
 export default defineConfig({
   clearScreen: false,
   server: {
-    port: 1420,
+    port: Number(process.env.PINIT_DEV_PORT) || 1420,
     strictPort: true,
     watch: { ignored: ["**/src-tauri/**", "**/crates/**", "**/target/**"] },
   },
