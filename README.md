@@ -1,5 +1,6 @@
 # PinIt 📌
 
+## 와! 일반 사용자용 가이드!
 **PinIt**은 그림을 화면 맨 위에 **딱 붙여 두는** 작은 프로그램이에요.
 다른 창을 열어도 그림이 안 가려져요. 그림 보면서 공부하고, 게임하고, 그림 그릴 수 있어요! (Windows 전용)
 
@@ -79,7 +80,7 @@ PinIt을 켜면 **설정 창**이 나와요. 그림을 **설정 창 위로 쓱 �
 
 ---
 
-## 개발
+## 개발자용 가이드.
 
 ```
 npm ci
@@ -96,4 +97,6 @@ npx tauri build --bundles nsis # 설치 파일
 1. `npm version x.y.z` (또는 `patch`/`minor`/`major`) — package.json, Cargo.toml, tauri.conf.json, Cargo.lock 버전을 한 번에 갱신하고 `x.y.z` 커밋 + `vx.y.z` 태그 생성
 2. PR → `main` 머지 (merge commit, squash 금지)
 3. `Release` 워크플로가 `vx.y.z` **초안(draft)** 릴리스와 포터블 zip과 설치 파일(NSIS)을 자동 생성 (같은 버전의 릴리스가 이미 있으면 건너뜀)
-4. 초안의 노트를 다듬고 **Publish** — 공개되는 순간부터 실행 중인 앱이 업데이트 알림을 표시
+4. 초안의 노트를 다듬고 **Publish** — 공개되는 순간부터 실행 중인 앱이 업데이트 알림을 표시.
+
+개선 사항 제안 및 PR 환영.
