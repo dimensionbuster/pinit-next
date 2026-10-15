@@ -5,7 +5,7 @@ import "./settings.css";
 import { ipc } from "../ipc.ts";
 import { h } from "../ui/dom.ts";
 import { SettingsModel } from "./SettingsModel.ts";
-import { AppearanceSection, ArrangeSection, BrowserSection, Header, LayoutSection, OpenSection } from "./sections.ts";
+import { AppearanceSection, ArrangeSection, BrowserSection, Footer, Header, LayoutSection, OpenSection, UpdateBanner } from "./sections.ts";
 import { toast } from "./widgets.ts";
 
 async function main(): Promise<void> {
@@ -15,12 +15,14 @@ async function main(): Promise<void> {
 
   const dropHint = h("div", { class: "drop-overlay", hidden: true }, "놓아서 열기");
   const sections = [
+    new UpdateBanner().init(),
     new Header(model).init(),
     new OpenSection(model).init(),
     new ArrangeSection(model).init(),
     new LayoutSection(model).init(),
     new AppearanceSection(model).init(),
     new BrowserSection(model).init(),
+    new Footer(),
   ];
   root.append(h("main", { class: "page" }, ...sections.map((s) => s.el)), dropHint);
 

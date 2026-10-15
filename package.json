@@ -11,6 +11,7 @@
     "tauri": "tauri",
     "build:portable": "node scripts/make-portable.mjs",
     "dev:app": "node scripts/dev.mjs",
+    "version:set": "node scripts/version.mjs",
     "check": "tsc && npm test && cargo test --workspace"
   },
   "dependencies": {

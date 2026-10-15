@@ -63,3 +63,7 @@
 }
 
 .color { width: 36px; height: 28px; padding: 2px; border-radius: var(--r-sm); border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer; }
+
+/* ---- update notice / footer ---- */
+.update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-color: var(--accent); background: var(--accent-soft); }
+.page-foot { justify-content: space-between; padding: 4px 4px 0; }

@@ -1,4 +1,5 @@
-import { ipc, type Corner, type Flow, type ModeKind, type Theme } from "../ipc.ts";
+import { getVersion } from "@tauri-apps/api/app";
+import { ipc, type Corner, type Flow, type ModeKind, type Theme, type UpdateInfo } from "../ipc.ts";
 import { clear, h } from "../ui/dom.ts";
 import { icon } from "../ui/icons.ts";
 import type { SettingsModel } from "./SettingsModel.ts";
@@ -325,6 +326,73 @@ export class Header extends BaseSection {
         h("button", { class: "btn", type: "button", disabled: n === 0, onClick: () => run(ipc.relayout()) }, icon("arrange"), "다시 정렬"),
         h("button", { class: "btn danger", type: "button", disabled: n === 0, onClick: () => run(ipc.closeAll()) }, icon("trash"), "모두 닫기"),
         h("button", { class: "btn ghost icon-only", type: "button", title: "PinIt 종료", "aria-label": "PinIt 종료", onClick: () => void ipc.quit() }, icon("power")),
+      ),
+    );
+  }
+}
+
+/** Latest-release lookup shared by the banner (top) and the footer (bottom, manual re-check). */
+const update = {
+  info: null as UpdateInfo | null,
+  listeners: [] as Array<() => void>,
+  async check(): Promise<UpdateInfo | null> {
+    try {
+      this.info = await ipc.checkUpdate();
+    } catch {
+      this.info = null; // offline or rate-limited: a best-effort notice, never an error dialog
+    }
+    this.listeners.forEach((l) => l());
+    return this.info;
+  },
+};
+
+export class UpdateBanner implements Section {
+  readonly el = h("div", { class: "section-host" });
+  constructor() {
+    update.listeners.push(() => this.mount());
+  }
+  private mount(): void {
+    clear(this.el);
+    const info = update.info;
+    if (!info?.available) return;
+    this.el.append(
+      h(
+        "div",
+        { class: "card update-banner" },
+        h("div", {}, h("h2", { class: "h2" }, `새 버전 v${info.latest} 사용 가능`), h("div", { class: "caption" }, `현재 v${info.current}`)),
+        h("button", { class: "btn", type: "button", onClick: () => void ipc.openReleasePage(info.url).catch((e) => toast(String(e))) }, "릴리스 페이지 열기"),
+      ),
+    );
+  }
+  init(): this {
+    void update.check();
+    return this;
+  }
+}
+
+export class Footer implements Section {
+  readonly el = h("footer", { class: "row page-foot" });
+  private version = "";
+  constructor() {
+    void getVersion().then((v) => {
+      this.version = v;
+      this.mount();
+    });
+    this.mount();
+  }
+  private mount(): void {
+    clear(this.el);
+    this.el.append(
+      h("span", { class: "caption" }, this.version ? `PinIt v${this.version}` : "PinIt"),
+      h(
+        "button",
+        {
+          class: "btn ghost",
+          type: "button",
+          onClick: () =>
+            void update.check().then((info) => toast(!info ? "업데이트를 확인하지 못했습니다" : info.available ? `새 버전 v${info.latest} 사용 가능` : "최신 버전입니다")),
+        },
+        "업데이트 확인",
       ),
     );
   }

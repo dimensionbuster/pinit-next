@@ -49,6 +49,13 @@ export interface DisplayInfo {
   primary: boolean;
 }
 
+export interface UpdateInfo {
+  available: boolean;
+  current: string;
+  latest: string;
+  url: string;
+}
+
 export const ipc = {
   viewerInit: () => invoke<ViewerInit>("viewer_init"),
   viewerSetView: (view: ViewState) => invoke<void>("viewer_set_view", { view }),
@@ -70,5 +77,7 @@ export const ipc = {
   exportLayout: () => invoke<string | null>("export_layout"),
   importLayout: () => invoke<number | null>("import_layout"),
   revealExtension: () => invoke<void>("reveal_extension"),
+  checkUpdate: () => invoke<UpdateInfo>("check_update"),
+  openReleasePage: (url: string) => invoke<void>("open_release_page", { url }),
   quit: () => invoke<void>("quit"),
 };

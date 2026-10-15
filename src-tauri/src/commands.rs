@@ -209,6 +209,22 @@ pub async fn reveal_extension(app: AppHandle) -> Res<()> {
     app.opener().reveal_item_in_dir(manifest).map_err(|e| e.to_string())
 }
 
+// ------------------------------------------------------------------ update
+
+/// Asks GitHub for the latest published release. Errors (offline, rate limit) are for the caller to ignore.
+#[tauri::command]
+pub async fn check_update() -> Res<crate::update::UpdateInfo> {
+    tauri::async_runtime::spawn_blocking(crate::update::check_latest).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn open_release_page(app: AppHandle, url: String) -> Res<()> {
+    if !crate::update::is_release_url(&url) {
+        return Err("not a PinIt release url".into());
+    }
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
 // ------------------------------------------------------------ .pinit layouts
 
 /// Saves the currently open windows (positions, sizes, views) to a `.pinit` file.

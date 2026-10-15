@@ -7,3 +7,7 @@ target
 *.local
 release-portable
 extension-dev
+
+# local Claude Code config
+.claude
+CLAUDE.md

@@ -1,0 +1,69 @@
+name: Release
+
+# Merge a version bump (`node scripts/version.mjs x.y.z`) to main and this drafts v<version>
+# with the portable zip attached. Review the draft, then publish it: publishing is what makes
+# running apps show the update notice (drafts are invisible to the releases/latest API).
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "version=$(node scripts/version.mjs)" >> "$GITHUB_OUTPUT"
+
+      - name: Check if release exists
+        id: check_tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # `gh release view` sees drafts too; a draft has no git tag ref until published.
+          if gh release view "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.check_tag.outputs.exists == 'false'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.check_tag.outputs.exists == 'false'
+
+      - name: Build portable
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          npm ci
+          npm run build:portable
+
+      - name: Package
+        if: steps.check_tag.outputs.exists == 'false'
+        shell: pwsh
+        run: Compress-Archive -Path release-portable/PinIt -DestinationPath "PinIt-v${{ steps.version.outputs.version }}-windows-portable.zip"
+
+      - name: Create draft release
+        if: steps.check_tag.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" \
+            "PinIt-v${{ steps.version.outputs.version }}-windows-portable.zip" \
+            --target "${{ github.sha }}" \
+            --title "v${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            --draft

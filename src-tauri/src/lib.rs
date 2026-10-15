@@ -7,6 +7,7 @@ pub mod date;
 pub mod extension_bundle;
 pub mod native_host;
 pub mod paths;
+pub mod update;
 
 use std::sync::atomic::Ordering;
 
@@ -183,6 +184,8 @@ pub fn run() {
             commands::export_layout,
             commands::import_layout,
             commands::reveal_extension,
+            commands::check_update,
+            commands::open_release_page,
             commands::quit,
         ])
         .build(tauri::generate_context!())
