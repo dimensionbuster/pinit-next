@@ -1,3 +1,9 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
 /// Axis-aligned rectangle in integer DIP (device-independent pixels).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
@@ -8,6 +14,21 @@ pub struct Rect {
 }
 
 impl Rect {
+    pub const fn center(&self) -> Point {
+        Point { x: self.x + self.w / 2, y: self.y + self.h / 2 }
+    }
+
+    pub const fn contains_point(&self, p: Point) -> bool {
+        p.x >= self.x && p.x < self.right() && p.y >= self.y && p.y < self.bottom()
+    }
+
+    /// Area of the intersection (0 when disjoint).
+    pub fn overlap_area(&self, o: &Rect) -> i64 {
+        let w = (self.right().min(o.right()) - self.x.max(o.x)).max(0) as i64;
+        let h = (self.bottom().min(o.bottom()) - self.y.max(o.y)).max(0) as i64;
+        w * h
+    }
+
     pub const fn new(x: i32, y: i32, w: i32, h: i32) -> Self {
         Self { x, y, w, h }
     }
