@@ -50,6 +50,11 @@
   .page-head { flex-direction: column; align-items: flex-start; }
 }
 
+.status { display: inline-flex; align-items: center; gap: 6px; flex: none; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); }
+.status.ok { color: var(--text); }
+.status.ok i { background: #2fa866; }
+
 .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .steps li { display: flex; gap: 10px; align-items: baseline; }
 .step-n {

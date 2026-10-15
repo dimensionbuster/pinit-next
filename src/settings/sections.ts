@@ -51,7 +51,7 @@ export class OpenSection extends BaseSection {
         "div",
         { class: "dropzone" },
         icon("image"),
-        h("div", {}, h("div", { class: "h2" }, "이미지를 여기에 끌어다 놓기"), h("div", { class: "caption" }, "또는 브라우저에서 이미지 우클릭 → PinIt으로 열기")),
+        h("div", {}, h("div", { class: "h2" }, "이미지를 여기에 끌어다 놓기"), h("div", { class: "caption" }, "웹 이미지는 아래 \u2018브라우저 연동\u2019을 설치하면 우클릭으로 바로 열 수 있습니다")),
         h("button", { class: "btn", type: "button", onClick: () => void ipc.pickAndOpen().then(() => this.model.refresh()) }, icon("folder"), "파일 선택"),
       ),
       h("div", { class: "row" }, this.input, h("button", { class: "btn primary", type: "button", onClick: () => void submit() }, icon("link"), "열기")),
@@ -235,23 +235,30 @@ export class LayoutSection extends BaseSection {
 
 export class BrowserSection extends BaseSection {
   protected build(): HTMLElement {
+    const connected = this.model.settings.bridge_connected;
     const step = (n: number, text: string) =>
       h("li", {}, h("span", { class: "step-n" }, String(n)), h("span", {}, text));
     return card(
       "브라우저 연동",
-      h("div", { class: "caption" }, "Chrome · Edge · Brave에서 이미지를 우클릭해 바로 열 수 있습니다. 한 번만 설치하면 됩니다."),
+      h(
+        "div",
+        { class: "row between" },
+        h("div", { class: "caption" }, "크롬·엣지·브라우저에서 웹페이지의 이미지를 마우스 오른쪽 버튼으로 눌러 바로 PinIt 창으로 띄웁니다."),
+        h("span", { class: `status ${connected ? "ok" : ""}`, role: "status" }, h("i", {}), connected ? "연결됨" : "아직 연결 안 됨"),
+      ),
       h(
         "ol",
         { class: "steps" },
-        step(1, "아래 버튼으로 확장 폴더를 엽니다."),
-        step(2, "브라우저에서 chrome://extensions 를 열고 개발자 모드를 켭니다."),
-        step(3, "‘압축해제된 확장 프로그램을 로드합니다’로 열린 폴더를 선택합니다."),
-        step(4, "이미지 우클릭 → ‘PinIt으로 열기’"),
+        step(1, "아래 ‘확장 폴더 열기’를 누르면 폴더가 열립니다. (그 폴더 안에 manifest.json이 있습니다)"),
+        step(2, "크롬 주소창에 chrome://extensions 를 입력하고, 오른쪽 위 ‘개발자 모드’를 켭니다."),
+        step(3, "왼쪽 위 ‘압축해제된 확장 프로그램을 로드합니다’를 누르고 1번에서 열린 폴더를 선택합니다."),
+        step(4, "설치되면 이 카드에 ‘연결됨’이 표시됩니다. 이제 웹페이지의 이미지 위에서 오른쪽 클릭 → ‘PinIt으로 열기’."),
       ),
       h(
         "div",
         { class: "row" },
         h("button", { class: "btn", type: "button", onClick: () => void ipc.revealExtension().catch((e) => toast(String(e))) }, icon("folder"), "확장 폴더 열기"),
+        h("span", { class: "caption" }, "확장은 자동으로 설치되지 않습니다. 브라우저 정책상 한 번 직접 로드해야 합니다."),
       ),
     );
   }

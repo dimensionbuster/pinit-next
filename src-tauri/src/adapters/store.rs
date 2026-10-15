@@ -62,6 +62,8 @@ pub struct Settings {
     pub backdrop_opacity: f64,
     /// "Re-arrange" keeps each window's current size and only moves them.
     pub relayout_keep_sizes: bool,
+    /// Set by the app (never by the UI) once the browser extension has talked to it.
+    pub bridge_connected: bool,
 }
 
 impl Default for Settings {
@@ -80,6 +82,7 @@ impl Default for Settings {
             backdrop_color: "#000000".into(),
             backdrop_opacity: 0.4,
             relayout_keep_sizes: false,
+            bridge_connected: false,
         }
     }
 }

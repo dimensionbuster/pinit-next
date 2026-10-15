@@ -89,8 +89,13 @@ fn extension_for(data: &[u8]) -> &'static str {
 }
 
 fn open_args(msg: &Value, env: &dyn HostEnv) -> Result<Vec<String>, String> {
-    if msg.get("v").and_then(Value::as_u64) != Some(1) || msg.get("type").and_then(Value::as_str) != Some("open") {
+    if msg.get("v").and_then(Value::as_u64) != Some(1) {
         return Err("unsupported message".into());
+    }
+    match msg.get("type").and_then(Value::as_str) {
+        Some("open") => {}
+        Some("hello") => return Ok(vec!["--bridge-hello".to_string()]),
+        _ => return Err("unsupported message".into()),
     }
     if let Some(url) = msg.get("url").and_then(Value::as_str) {
         if url.len() > MAX_URL_LEN || !(url.starts_with("http://") || url.starts_with("https://")) {
@@ -324,6 +329,14 @@ mod tests {
             env.launched.lock().unwrap()[0],
             ["--open-url", "https://e.com/a.jpg", "--referer", "https://e.com/page"]
         );
+    }
+
+    #[test]
+    fn hello_message_just_tells_the_app_the_extension_is_installed() {
+        let env = FakeEnv::new("hello");
+        assert_eq!(handle_message(br#"{"v":1,"type":"hello"}"#, &env), json!({"ok": true}));
+        assert_eq!(env.launched.lock().unwrap()[0], ["--bridge-hello"]);
+        assert_eq!(handle_message(br#"{"v":1,"type":"nope"}"#, &env)["ok"], false);
     }
 
     #[test]

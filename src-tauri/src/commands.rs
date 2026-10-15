@@ -89,7 +89,9 @@ pub async fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
 
 #[tauri::command]
 pub async fn set_settings(settings: Settings, app: AppHandle, state: State<'_, AppState>) -> Res<Settings> {
-    let settings = settings.sanitized();
+    let mut settings = settings.sanitized();
+    // owned by the app: a stale UI copy must not reset it
+    settings.bridge_connected = state.settings.lock().unwrap().bridge_connected;
     state.settings_file.save(&settings).map_err(|e| e.to_string())?;
     state.service.lock().unwrap().set_config(settings.layout_config());
     *state.settings.lock().unwrap() = settings.clone();

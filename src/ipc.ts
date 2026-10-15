@@ -38,6 +38,7 @@ export interface Settings {
   backdrop_color: string;
   backdrop_opacity: number;
   relayout_keep_sizes: boolean;
+  bridge_connected: boolean;
 }
 
 export interface DisplayInfo {

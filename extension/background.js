@@ -7,6 +7,8 @@ const MENU_ID = "pinit-open";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: MENU_ID, title: "PinIt으로 열기", contexts: ["image"] });
+  // Lets the PinIt app show "connected" right after install. Ignored if the app is not installed.
+  chrome.runtime.sendNativeMessage(HOST, { v: 1, type: "hello" }).catch(() => {});
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {

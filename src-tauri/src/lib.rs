@@ -17,14 +17,28 @@ use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use pinit_core::geometry::Rect;
 
 use crate::adapters::tauri_host::id_from_label;
-use crate::app::{open_in_background, restore_saved, set_quitting, AppState, Msg};
-use crate::cli::parse_open_args;
+use crate::app::{mark_bridge_connected, open_in_background, restore_saved, set_quitting, AppState, Msg};
+use crate::cli::{from_browser, has_flag, parse_open_args};
 
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
+    }
+}
+
+/// Handles argv from this launch or from a second instance (browser bridge, file association).
+fn handle_launch_args(app: &AppHandle, args: &[String]) {
+    if from_browser(args) {
+        mark_bridge_connected(app, has_flag(args, "--bridge-hello"));
+    }
+    let images = parse_open_args(args);
+    if images.is_empty() {
+        // a bare launch or an extension hello: show the window (hello makes the "connected" status visible)
+        show_main(app);
+    } else {
+        open_in_background(app, images);
     }
 }
 
@@ -116,12 +130,7 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            let images = parse_open_args(argv.get(1..).unwrap_or_default());
-            if images.is_empty() {
-                show_main(app);
-            } else {
-                open_in_background(app, images);
-            }
+            handle_launch_args(app, argv.get(1..).unwrap_or_default());
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -150,13 +159,8 @@ pub fn run() {
             }
 
             let args: Vec<String> = std::env::args().skip(1).collect();
-            let images = parse_open_args(&args);
             restore_saved(&handle);
-            if images.is_empty() {
-                show_main(&handle);
-            } else {
-                open_in_background(&handle, images);
-            }
+            handle_launch_args(&handle, &args);
             Ok(())
         })
         .on_window_event(on_window_event)

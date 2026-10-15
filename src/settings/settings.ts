@@ -28,6 +28,10 @@ async function main(): Promise<void> {
   window.addEventListener("focus", () => void model.refresh());
 
   await listen<string>("toast", (e) => toast(e.payload));
+  await listen("bridge-connected", () => {
+    void model.reloadSettings();
+    toast("브라우저 확장이 연결되었습니다");
+  });
   await getCurrentWebview().onDragDropEvent((e) => {
     const t = e.payload.type;
     if (t === "enter" || t === "over") dropHint.hidden = false;

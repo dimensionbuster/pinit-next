@@ -183,6 +183,23 @@ pub fn restore_saved(app: &AppHandle) {
     open_saved_in_background(app, saved);
 }
 
+/// The browser extension reached the app: remember it and let the UI know.
+pub fn mark_bridge_connected(app: &AppHandle, announce: bool) {
+    let state = app.state::<AppState>();
+    let changed = {
+        let mut s = state.settings.lock().unwrap();
+        let changed = !s.bridge_connected;
+        s.bridge_connected = true;
+        if changed {
+            let _ = state.settings_file.save(&s);
+        }
+        changed
+    };
+    if changed || announce {
+        let _ = app.emit("bridge-connected", ());
+    }
+}
+
 pub fn set_quitting(app: &AppHandle) {
     let state = app.state::<AppState>();
     state.quitting.store(true, Ordering::SeqCst);

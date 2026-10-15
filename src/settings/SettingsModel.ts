@@ -32,6 +32,12 @@ export class SettingsModel {
     for (const l of this.listeners) l();
   }
 
+  /** Re-read settings owned by the app (e.g. bridge status) without losing UI state. */
+  async reloadSettings(): Promise<void> {
+    this.settings = { ...this.settings, bridge_connected: (await ipc.getSettings()).bridge_connected };
+    this.emit();
+  }
+
   async refresh(): Promise<void> {
     [this.displays, this.openCount] = await Promise.all([ipc.listDisplays(), ipc.openCount()]);
     this.emit();

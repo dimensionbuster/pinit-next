@@ -16,6 +16,15 @@ pub fn is_image_path(p: &std::path::Path) -> bool {
         .is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
+pub fn has_flag(args: &[String], flag: &str) -> bool {
+    args.iter().any(|a| a == flag)
+}
+
+/// True when the launch came from the browser bridge (an extension hello or an open request).
+pub fn from_browser(args: &[String]) -> bool {
+    has_flag(args, "--bridge-hello") || has_flag(args, "--open-url")
+}
+
 /// `args` excludes the executable name.
 pub fn parse_open_args(args: &[String]) -> Vec<ImageRef> {
     let mut out = Vec::new();
@@ -83,6 +92,14 @@ mod tests {
             "--unknown-flag",
         ]);
         assert_eq!(parse_open_args(&args), vec![ImageRef::File(img)]);
+    }
+
+    #[test]
+    fn browser_launches_are_recognised() {
+        assert!(from_browser(&a(&["--bridge-hello"])));
+        assert!(from_browser(&a(&["--open-url", "https://e.com/a.jpg"])));
+        assert!(!from_browser(&a(&["C:/a.png"])));
+        assert!(parse_open_args(&a(&["--bridge-hello"])).is_empty());
     }
 
     #[test]
