@@ -1,11 +1,12 @@
 name: Release
 
 # Merge a version bump (`node scripts/version.mjs x.y.z`) to main and this drafts v<version>
-# with the portable zip attached. Review the draft, then publish it: publishing is what makes
+# with the portable zip and NSIS installer attached. Review the draft, then publish it: publishing is what makes
 # running apps show the update notice (drafts are invisible to the releases/latest API).
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -50,10 +51,18 @@ jobs:
           npm ci
           npm run build:portable
 
+      - name: Build installer (NSIS)
+        if: steps.check_tag.outputs.exists == 'false'
+        run: npx tauri build --bundles nsis
+
       - name: Package
         if: steps.check_tag.outputs.exists == 'false'
         shell: pwsh
-        run: Compress-Archive -Path release-portable/PinIt -DestinationPath "PinIt-v${{ steps.version.outputs.version }}-windows-portable.zip"
+        run: |
+          Compress-Archive -Path release-portable/PinIt -DestinationPath "PinIt-v${{ steps.version.outputs.version }}-windows-portable.zip"
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "NSIS installer not found" }
+          Copy-Item $setup.FullName "PinIt-v${{ steps.version.outputs.version }}-windows-setup.exe"
 
       - name: Create draft release
         if: steps.check_tag.outputs.exists == 'false'
@@ -62,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "v${{ steps.version.outputs.version }}" \
-            "PinIt-v${{ steps.version.outputs.version }}-windows-portable.zip" \
+            "PinIt-v${{ steps.version.outputs.version }}-windows-portable.zip" \n            "PinIt-v${{ steps.version.outputs.version }}-windows-setup.exe" \
             --target "${{ github.sha }}" \
             --title "v${{ steps.version.outputs.version }}" \
             --generate-notes \
