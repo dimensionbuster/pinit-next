@@ -191,6 +191,8 @@ pub fn run() {
             commands::relayout,
             commands::close_all,
             commands::save_all,
+            commands::open_url_text,
+            commands::open_dropped,
             commands::export_layout,
             commands::import_layout,
             commands::reveal_extension,

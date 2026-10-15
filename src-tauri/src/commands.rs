@@ -5,6 +5,7 @@
 //! lock while creating a window, which needs the UI thread. A sync command
 //! waiting for that lock would block the UI thread forever.
 
+use pinit_core::image_ref::ImageRef;
 use pinit_core::ports::Display;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -14,7 +15,8 @@ use tauri_plugin_opener::OpenerExt;
 use crate::adapters::store::Settings;
 use crate::adapters::tauri_host::{id_from_label, ViewJson, ViewerInit};
 use crate::adapters::store::{decode_layout, encode_layout};
-use crate::app::{open_saved_in_background, AppState, Msg};
+use crate::app::{open_in_background, open_saved_in_background, AppState, Msg};
+use crate::b64;
 
 type Res<T> = Result<T, String>;
 
@@ -192,6 +194,24 @@ pub async fn close_all(app: AppHandle) {
             let _ = w.close();
         }
     }
+}
+
+#[tauri::command]
+pub async fn open_url_text(text: String, app: AppHandle) -> Res<()> {
+    let t = text.trim().to_string();
+    if !(t.starts_with("http://") || t.starts_with("https://")) {
+        return Err("http(s) 이미지 주소를 입력하세요".into());
+    }
+    open_in_background(&app, vec![ImageRef::Url { url: t, referer: None }]);
+    Ok(())
+}
+
+/// Image bytes dropped onto the settings window (Explorer files or images dragged from a browser).
+#[tauri::command]
+pub async fn open_dropped(data_b64: String, mime: String, app: AppHandle) -> Res<()> {
+    let data = b64::decode(&data_b64).ok_or("이미지를 읽지 못했습니다")?;
+    open_in_background(&app, vec![ImageRef::Bytes { data: data.into(), mime }]);
+    Ok(())
 }
 
 #[tauri::command]
