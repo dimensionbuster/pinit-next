@@ -100,20 +100,20 @@ impl Entry {
 }
 
 pub struct OpenService {
-    resolver: Box<dyn ImageResolver>,
-    host: Box<dyn WindowHost>,
-    displays: Box<dyn DisplayProvider>,
-    rng: Box<dyn Rng>,
+    resolver: Box<dyn ImageResolver + Send>,
+    host: Box<dyn WindowHost + Send>,
+    displays: Box<dyn DisplayProvider + Send>,
+    rng: Box<dyn Rng + Send>,
     config: LayoutConfig,
     windows: Vec<Entry>,
 }
 
 impl OpenService {
     pub fn new(
-        resolver: Box<dyn ImageResolver>,
-        host: Box<dyn WindowHost>,
-        displays: Box<dyn DisplayProvider>,
-        rng: Box<dyn Rng>,
+        resolver: Box<dyn ImageResolver + Send>,
+        host: Box<dyn WindowHost + Send>,
+        displays: Box<dyn DisplayProvider + Send>,
+        rng: Box<dyn Rng + Send>,
         config: LayoutConfig,
     ) -> Self {
         Self { resolver, host, displays, rng, config, windows: Vec::new() }
@@ -297,8 +297,7 @@ mod tests {
     use super::*;
     use crate::placement::{Corner, Flow};
     use crate::ports::ResolvedImage;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
     #[derive(Default)]
     struct HostLog {
@@ -307,17 +306,17 @@ mod tests {
         next: WindowId,
     }
 
-    struct FakeHost(Rc<RefCell<HostLog>>);
+    struct FakeHost(Arc<Mutex<HostLog>>);
 
     impl WindowHost for FakeHost {
         fn open(&mut self, spec: &WindowSpec) -> Result<WindowId, HostError> {
-            let mut l = self.0.borrow_mut();
+            let mut l = self.0.lock().unwrap();
             l.next += 1;
             l.opened.push(spec.clone());
             Ok(l.next)
         }
         fn set_bounds(&mut self, id: WindowId, b: Rect) {
-            self.0.borrow_mut().bounds.push((id, b));
+            self.0.lock().unwrap().bounds.push((id, b));
         }
         fn close(&mut self, _id: WindowId) {}
     }
@@ -352,7 +351,7 @@ mod tests {
             } else {
                 (1000, 1000)
             };
-            Ok(ResolvedImage { image: image.clone(), width, height })
+            Ok(ResolvedImage { image: image.clone(), local_path: "fake.png".into(), width, height })
         }
     }
 
@@ -383,8 +382,8 @@ mod tests {
         ]
     }
 
-    fn service(cursor: Option<Point>, preferred: Option<DisplayId>) -> (OpenService, Rc<RefCell<HostLog>>) {
-        let log = Rc::new(RefCell::new(HostLog::default()));
+    fn service(cursor: Option<Point>, preferred: Option<DisplayId>) -> (OpenService, Arc<Mutex<HostLog>>) {
+        let log = Arc::new(Mutex::new(HostLog::default()));
         let svc = OpenService::new(
             Box::new(FakeResolver),
             Box::new(FakeHost(log.clone())),
@@ -403,7 +402,7 @@ mod tests {
     fn opens_at_anchor_with_image_aspect() {
         let (mut svc, log) = service(None, None);
         assert_eq!(svc.open(req("wide")), Ok(OpenOutcome::Opened(1)));
-        let spec = &log.borrow().opened[0];
+        let spec = &log.lock().unwrap().opened[0];
         assert_eq!(spec.bounds, Rect::new(0, 0, 600, 300));
     }
 
@@ -413,7 +412,7 @@ mod tests {
         svc.open(req("a")).unwrap();
         let again = OpenRequest { image: url("a"), restore: None };
         assert_eq!(svc.open(again), Ok(OpenOutcome::AlreadyOpen(1)));
-        assert_eq!(log.borrow().opened.len(), 1);
+        assert_eq!(log.lock().unwrap().opened.len(), 1);
         assert_eq!(svc.open_count(), 1);
     }
 
@@ -421,7 +420,7 @@ mod tests {
     fn resolve_failure_opens_nothing() {
         let (mut svc, log) = service(None, None);
         assert!(matches!(svc.open(req("bad")), Err(OpenError::Resolve(_))));
-        assert!(log.borrow().opened.is_empty());
+        assert!(log.lock().unwrap().opened.is_empty());
         assert_eq!(svc.open_count(), 0);
     }
 
@@ -439,14 +438,14 @@ mod tests {
         let (mut svc, log) = service(Some(Point { x: 2500, y: 100 }), None);
         svc.open(req("a")).unwrap();
         svc.open(req("b")).unwrap();
-        let l = log.borrow();
+        let l = log.lock().unwrap();
         assert_eq!(l.opened[0].bounds, Rect::new(1920, 0, 300, 300));
         assert_eq!(l.opened[1].bounds, Rect::new(2220, 0, 300, 300));
     }
 
     #[test]
     fn grid_line_is_dip_scaled_per_display() {
-        let log = Rc::new(RefCell::new(HostLog::default()));
+        let log = Arc::new(Mutex::new(HostLog::default()));
         let mut displays = two_displays();
         displays[1].scale = 1.5;
         let mut svc = OpenService::new(
@@ -462,7 +461,7 @@ mod tests {
         );
         svc.open(req("a")).unwrap();
         // 300 DIP * 1.5 = 450 physical px on the HiDPI display
-        assert_eq!(log.borrow().opened[0].bounds, Rect::new(1920, 0, 450, 450));
+        assert_eq!(log.lock().unwrap().opened[0].bounds, Rect::new(1920, 0, 450, 450));
     }
 
     #[test]
@@ -474,7 +473,7 @@ mod tests {
         svc.on_closed(1);
         assert_eq!(svc.open_count(), 2);
         svc.relayout_all();
-        let moved: Vec<(WindowId, Rect)> = log.borrow().bounds.clone();
+        let moved: Vec<(WindowId, Rect)> = log.lock().unwrap().bounds.clone();
         assert_eq!(moved, vec![(2, Rect::new(0, 0, 300, 300)), (3, Rect::new(300, 0, 300, 300))]);
     }
 
@@ -486,7 +485,7 @@ mod tests {
         v.rotate_quarter(true);
         let b = svc.set_view(1, v).expect("aspect changed");
         assert_eq!((b.w, b.h), (300, 600));
-        assert_eq!(log.borrow().bounds.last(), Some(&(1, b)));
+        assert_eq!(log.lock().unwrap().bounds.last(), Some(&(1, b)));
         // free-angle rotation never resizes
         v.set_fine_angle(20.0);
         assert!(svc.set_view(1, v).is_none());
@@ -508,7 +507,7 @@ mod tests {
         svc.open(OpenRequest { image: url("a"), restore: Some(on) }).unwrap();
         let off = Restore { bounds: Rect::new(9000, 9000, 250, 250), view: ViewState::default() };
         svc.open(OpenRequest { image: url("b"), restore: Some(off) }).unwrap();
-        let l = log.borrow();
+        let l = log.lock().unwrap();
         assert_eq!(l.opened[0].bounds, Rect::new(100, 100, 250, 250));
         // The restored window blocks the first slots, so the off-screen one is
         // re-placed at the first free spot in anchor order.

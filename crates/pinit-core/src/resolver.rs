@@ -46,7 +46,12 @@ pub(crate) mod fakes {
             self.calls.set(self.calls.get() + 1);
             self.answer
                 .clone()
-                .map(|(width, height)| ResolvedImage { image: image.clone(), width, height })
+                .map(|(width, height)| ResolvedImage {
+                    image: image.clone(),
+                    local_path: "fake.png".into(),
+                    width,
+                    height,
+                })
         }
     }
 }

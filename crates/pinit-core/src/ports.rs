@@ -27,11 +27,13 @@ pub trait DisplayProvider {
     fn cursor(&self) -> Option<Point>;
 }
 
-/// An image whose pixel size is known and whose reference is stable
-/// (a URL that loads, a file that exists, or cached bytes).
+/// An image fetched/located locally with a known displayed size.
+/// `image` is the original reference (persisted for restore); the viewer
+/// only ever loads `local_path`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedImage {
     pub image: ImageRef,
+    pub local_path: std::path::PathBuf,
     pub width: u32,
     pub height: u32,
 }
