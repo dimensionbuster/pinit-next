@@ -1,6 +1,6 @@
 name: Release
 
-# Merge a version bump (`node scripts/version.mjs x.y.z`) to main and this drafts v<version>
+# Merge a version bump (`npm version x.y.z`) to main and this drafts v<version>
 # with the portable zip and NSIS installer attached. Review the draft, then publish it: publishing is what makes
 # running apps show the update notice (drafts are invisible to the releases/latest API).
 on:

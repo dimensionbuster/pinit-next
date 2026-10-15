@@ -27,7 +27,7 @@ npx tauri build --bundles nsis # 설치 파일
 
 ## 릴리스 절차
 
-1. `node scripts/version.mjs x.y.z` — package.json, Cargo.toml, tauri.conf.json, Cargo.lock 버전을 한 번에 갱신
-2. 커밋 후 PR → `main` 머지
+1. `npm version x.y.z` (또는 `patch`/`minor`/`major`) — package.json, Cargo.toml, tauri.conf.json, Cargo.lock 버전을 한 번에 갱신하고 `x.y.z` 커밋 + `vx.y.z` 태그 생성
+2. PR → `main` 머지 (merge commit, squash 금지)
 3. `Release` 워크플로가 `vx.y.z` **초안(draft)** 릴리스와 포터블 zip과 설치 파일(NSIS)을 자동 생성 (같은 버전의 릴리스가 이미 있으면 건너뜀)
 4. 초안의 노트를 다듬고 **Publish** — 공개되는 순간부터 실행 중인 앱이 업데이트 알림을 표시
