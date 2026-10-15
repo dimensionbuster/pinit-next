@@ -171,7 +171,7 @@ impl OpenService {
         self.windows.push(Entry {
             id,
             key,
-            image: resolved.image,
+            image: persistable(&resolved),
             display_id,
             bounds,
             view,
@@ -251,6 +251,14 @@ impl OpenService {
 
     pub fn open_count(&self) -> usize {
         self.windows.len()
+    }
+}
+
+/// What to save for restore: in-memory bytes only survive as their cached file.
+fn persistable(r: &crate::ports::ResolvedImage) -> ImageRef {
+    match &r.image {
+        ImageRef::Bytes { .. } => ImageRef::File(r.local_path.clone()),
+        other => other.clone(),
     }
 }
 
