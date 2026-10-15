@@ -39,12 +39,22 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main(app),
+            // Menu callbacks run on the UI thread: never take the service lock here.
             "relayout" => {
-                let state = app.state::<AppState>();
-                state.service.lock().unwrap().relayout_all();
-                state.send(Msg::Dirty);
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    let state = app.state::<AppState>();
+                    state.service.lock().unwrap().relayout_all();
+                    state.send(Msg::Dirty);
+                });
             }
-            "quit" => commands::quit(app.clone()),
+            "quit" => {
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    set_quitting(&app);
+                    app.exit(0);
+                });
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

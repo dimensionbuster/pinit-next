@@ -1,4 +1,9 @@
 //! IPC commands exposed to the web UI.
+//!
+//! DEADLOCK RULE: every command that touches `AppState` locks must be `async`.
+//! Sync commands run on the UI thread; `OpenService::open*` holds the service
+//! lock while creating a window, which needs the UI thread. A sync command
+//! waiting for that lock would block the UI thread forever.
 
 use pinit_core::image_ref::ImageRef;
 use pinit_core::ports::Display;
@@ -17,7 +22,7 @@ type Res<T> = Result<T, String>;
 // ------------------------------------------------------------------ viewer
 
 #[tauri::command]
-pub fn viewer_init(window: WebviewWindow, state: State<AppState>) -> Res<ViewerInit> {
+pub async fn viewer_init(window: WebviewWindow, state: State<'_, AppState>) -> Res<ViewerInit> {
     state
         .registry
         .lock()
@@ -28,7 +33,7 @@ pub fn viewer_init(window: WebviewWindow, state: State<AppState>) -> Res<ViewerI
 }
 
 #[tauri::command]
-pub fn viewer_set_view(window: WebviewWindow, view: ViewJson, state: State<AppState>) -> Res<()> {
+pub async fn viewer_set_view(window: WebviewWindow, view: ViewJson, state: State<'_, AppState>) -> Res<()> {
     let id = id_from_label(window.label()).ok_or("not a viewer window")?;
     state.service.lock().unwrap().set_view(id, view.into());
     state.send(Msg::Dirty);
@@ -36,7 +41,7 @@ pub fn viewer_set_view(window: WebviewWindow, view: ViewJson, state: State<AppSt
 }
 
 #[tauri::command]
-pub fn viewer_fit(window: WebviewWindow, state: State<AppState>) -> Res<()> {
+pub async fn viewer_fit(window: WebviewWindow, state: State<'_, AppState>) -> Res<()> {
     let id = id_from_label(window.label()).ok_or("not a viewer window")?;
     state.service.lock().unwrap().fit_to_aspect(id);
     Ok(())
@@ -48,7 +53,7 @@ pub fn viewer_close(window: WebviewWindow) {
 }
 
 #[tauri::command]
-pub fn viewer_open_source(window: WebviewWindow, app: AppHandle, state: State<AppState>) -> Res<()> {
+pub async fn viewer_open_source(window: WebviewWindow, app: AppHandle, state: State<'_, AppState>) -> Res<()> {
     let init = state.registry.lock().unwrap().get(window.label()).cloned().ok_or("unknown window")?;
     match init.source_url {
         Some(url) if url.starts_with("http://") || url.starts_with("https://") => {
@@ -77,12 +82,12 @@ pub async fn viewer_save_as(window: WebviewWindow, app: AppHandle, state: State<
 // ---------------------------------------------------------------- settings
 
 #[tauri::command]
-pub fn get_settings(state: State<AppState>) -> Settings {
-    state.settings.lock().unwrap().clone()
+pub async fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
+    Ok(state.settings.lock().unwrap().clone())
 }
 
 #[tauri::command]
-pub fn set_settings(settings: Settings, state: State<AppState>) -> Res<Settings> {
+pub async fn set_settings(settings: Settings, state: State<'_, AppState>) -> Res<Settings> {
     state.settings_file.save(&settings).map_err(|e| e.to_string())?;
     state.service.lock().unwrap().set_config(settings.layout_config());
     *state.settings.lock().unwrap() = settings.clone();
@@ -99,7 +104,7 @@ pub struct DisplayInfo {
 }
 
 #[tauri::command]
-pub fn list_displays(app: AppHandle) -> Vec<DisplayInfo> {
+pub async fn list_displays(app: AppHandle) -> Vec<DisplayInfo> {
     use pinit_core::ports::DisplayProvider;
     crate::adapters::displays::TauriDisplays(app)
         .displays()
@@ -117,18 +122,19 @@ pub fn list_displays(app: AppHandle) -> Vec<DisplayInfo> {
 // ----------------------------------------------------------------- actions
 
 #[tauri::command]
-pub fn open_count(state: State<AppState>) -> usize {
-    state.service.lock().unwrap().open_count()
+pub async fn open_count(state: State<'_, AppState>) -> Res<usize> {
+    Ok(state.service.lock().unwrap().open_count())
 }
 
 #[tauri::command]
-pub fn relayout(state: State<AppState>) {
+pub async fn relayout(state: State<'_, AppState>) -> Res<()> {
     state.service.lock().unwrap().relayout_all();
     state.send(Msg::Dirty);
+    Ok(())
 }
 
 #[tauri::command]
-pub fn close_all(app: AppHandle) {
+pub async fn close_all(app: AppHandle) {
     for (label, w) in app.webview_windows() {
         if id_from_label(&label).is_some() {
             let _ = w.close();
@@ -156,7 +162,7 @@ pub async fn pick_and_open(app: AppHandle) -> Res<usize> {
 }
 
 #[tauri::command]
-pub fn open_paths(paths: Vec<String>, app: AppHandle) -> usize {
+pub async fn open_paths(paths: Vec<String>, app: AppHandle) -> usize {
     let images: Vec<ImageRef> = paths
         .into_iter()
         .map(std::path::PathBuf::from)
@@ -169,7 +175,7 @@ pub fn open_paths(paths: Vec<String>, app: AppHandle) -> usize {
 }
 
 #[tauri::command]
-pub fn open_url_text(text: String, app: AppHandle) -> Res<()> {
+pub async fn open_url_text(text: String, app: AppHandle) -> Res<()> {
     let t = text.trim().to_string();
     if !(t.starts_with("http://") || t.starts_with("https://")) {
         return Err("http(s) 이미지 주소를 입력하세요".into());
@@ -179,14 +185,14 @@ pub fn open_url_text(text: String, app: AppHandle) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn quit(app: AppHandle) {
+pub async fn quit(app: AppHandle) {
     crate::app::set_quitting(&app);
     app.exit(0);
 }
 
 /// Shows the bundled browser extension folder so the user can "Load unpacked".
 #[tauri::command]
-pub fn reveal_extension(app: AppHandle) -> Res<()> {
+pub async fn reveal_extension(app: AppHandle) -> Res<()> {
     let dest = crate::paths::Paths::detect().data.join("extension");
     let manifest = crate::extension_bundle::extract(&dest).map_err(|e| e.to_string())?;
     app.opener().reveal_item_in_dir(manifest).map_err(|e| e.to_string())
