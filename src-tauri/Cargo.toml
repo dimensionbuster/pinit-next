@@ -1,6 +1,6 @@
 [package]
 name = "pinit-next"
-version = "0.1.0"
+version = "0.2.0"
 description = "PinIt: always-on-top image windows"
 authors = ["PinIt"]
 edition = "2024"

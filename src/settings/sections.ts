@@ -26,40 +26,6 @@ abstract class BaseSection implements Section {
   }
 }
 
-export class OpenSection extends BaseSection {
-  private input = h("input", {
-    class: "input",
-    type: "url",
-    placeholder: "이미지 주소 붙여넣기 (https://…)",
-    "aria-label": "이미지 주소",
-  });
-
-  protected build(): HTMLElement {
-    const submit = async () => {
-      const text = this.input.value.trim();
-      if (!text) return;
-      try {
-        await ipc.openUrlText(text);
-        this.input.value = "";
-      } catch (e) {
-        toast(String(e));
-      }
-    };
-    this.input.onkeydown = (e) => e.key === "Enter" && void submit();
-    return card(
-      "열기",
-      h(
-        "div",
-        { class: "dropzone" },
-        icon("image"),
-        h("div", {}, h("div", { class: "h2" }, "이미지를 여기에 끌어다 놓기"), h("div", { class: "caption" }, "웹 이미지는 아래 \u2018브라우저 연동\u2019을 설치하면 우클릭으로 바로 열 수 있습니다")),
-        h("button", { class: "btn", type: "button", onClick: () => void ipc.pickAndOpen().then(() => this.model.refresh()) }, icon("folder"), "파일 선택"),
-      ),
-      h("div", { class: "row" }, this.input, h("button", { class: "btn primary", type: "button", onClick: () => void submit() }, icon("link"), "열기")),
-    );
-  }
-}
-
 const GRID_PRESETS = [
   { label: "S", value: 200 },
   { label: "M", value: 300 },
@@ -229,6 +195,11 @@ export class LayoutSection extends BaseSection {
           h("button", { class: "btn", type: "button", disabled: n === 0, onClick: () => void run(() => ipc.exportLayout(), (p) => `저장했습니다: ${p}`) }, icon("download"), "저장"),
           h("button", { class: "btn", type: "button", onClick: () => void run(() => ipc.importLayout(), (c) => `${c}개 창을 불러옵니다`) }, icon("upload"), "불러오기"),
         ),
+      ),
+      field(
+        "이미지 다운로드",
+        "열려 있는 모든 창의 이미지를 선택한 폴더에 복사합니다.",
+        h("button", { class: "btn", type: "button", disabled: n === 0, onClick: () => void run(() => ipc.saveAll(), (c) => `${c}개 이미지를 저장했습니다`) }, icon("download"), "열린 창 모두 다운로드"),
       ),
     );
   }

@@ -7,6 +7,7 @@ pub mod date;
 pub mod extension_bundle;
 pub mod native_host;
 pub mod paths;
+pub mod shell_menu;
 pub mod update;
 
 use std::sync::atomic::Ordering;
@@ -46,9 +47,10 @@ fn handle_launch_args(app: &AppHandle, args: &[String]) {
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "PinIt 열기").build(app)?;
     let relayout = MenuItemBuilder::with_id("relayout", "다시 정렬").build(app)?;
+    let save_all = MenuItemBuilder::with_id("save_all", "열린 창 모두 다운로드").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "종료").build(app)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let menu = MenuBuilder::new(app).items(&[&open, &relayout, &sep, &quit]).build()?;
+    let menu = MenuBuilder::new(app).items(&[&open, &relayout, &save_all, &sep, &quit]).build()?;
     let mut tray = TrayIconBuilder::new()
         .tooltip("PinIt")
         .menu(&menu)
@@ -63,6 +65,15 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     let keep = state.settings.lock().unwrap().relayout_keep_sizes;
                     state.service.lock().unwrap().relayout_all(keep);
                     state.send(Msg::Dirty);
+                });
+            }
+            "save_all" => {
+                // The folder dialog blocks: keep it off the UI thread.
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = commands::save_all_open(&app) {
+                        eprintln!("save all failed: {e}");
+                    }
                 });
             }
             "quit" => {
@@ -153,6 +164,7 @@ pub fn run() {
             if let (Ok(exe), true) = (std::env::current_exe(), register) {
                 let dir = paths::Paths::detect().data;
                 std::thread::spawn(move || {
+                    shell_menu::register(&exe);
                     if let Err(e) = native_host::register(&exe, &dir.join("native-host")) {
                         eprintln!("native host registration failed: {e}");
                     }
@@ -178,6 +190,7 @@ pub fn run() {
             commands::open_count,
             commands::relayout,
             commands::close_all,
+            commands::save_all,
             commands::pick_and_open,
             commands::open_paths,
             commands::open_url_text,
