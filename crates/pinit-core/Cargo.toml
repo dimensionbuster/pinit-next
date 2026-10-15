@@ -1,0 +1,9 @@
+[package]
+name = "pinit-core"
+version = "0.1.0"
+edition = "2024"
+description = "PinIt domain core: pure logic, ports (traits), no I/O, no GUI, no DPI knowledge."
+
+# Dependency rule: this crate must stay free of tauri/OS/network crates.
+# Every new dependency here needs a written reason in docs/DEPENDENCIES.md.
+[dependencies]
