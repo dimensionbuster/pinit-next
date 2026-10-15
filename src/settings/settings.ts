@@ -4,6 +4,7 @@ import "./settings.css";
 import { h } from "../ui/dom.ts";
 import { SettingsModel } from "./SettingsModel.ts";
 import { AppearanceSection, ArrangeSection, BrowserSection, Footer, Header, LayoutSection, UpdateBanner } from "./sections.ts";
+import { installDropZone } from "./dropzone.ts";
 import { toast } from "./widgets.ts";
 
 async function main(): Promise<void> {
@@ -21,6 +22,8 @@ async function main(): Promise<void> {
     new Footer(),
   ];
   root.append(h("main", { class: "page" }, ...sections.map((s) => s.el)));
+
+  installDropZone();
 
   // Keep the open-window count fresh when the window regains focus.
   window.addEventListener("focus", () => void model.refresh());

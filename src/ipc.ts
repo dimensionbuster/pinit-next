@@ -68,6 +68,9 @@ export const ipc = {
   setSettings: (settings: Settings) => invoke<Settings>("set_settings", { settings }),
   listDisplays: () => invoke<DisplayInfo[]>("list_displays"),
 
+  openUrlText: (text: string) => invoke<void>("open_url_text", { text }),
+  openDropped: (dataB64: string, mime: string) => invoke<void>("open_dropped", { dataB64, mime }),
+
   openCount: () => invoke<number>("open_count"),
   relayout: () => invoke<void>("relayout"),
   closeAll: () => invoke<void>("close_all"),
