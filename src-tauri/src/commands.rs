@@ -5,7 +5,6 @@
 //! lock while creating a window, which needs the UI thread. A sync command
 //! waiting for that lock would block the UI thread forever.
 
-use pinit_core::image_ref::ImageRef;
 use pinit_core::ports::Display;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -15,8 +14,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::adapters::store::Settings;
 use crate::adapters::tauri_host::{id_from_label, ViewJson, ViewerInit};
 use crate::adapters::store::{decode_layout, encode_layout};
-use crate::app::{open_in_background, open_saved_in_background, AppState, Msg};
-use crate::cli::is_image_path;
+use crate::app::{open_saved_in_background, AppState, Msg};
 
 type Res<T> = Result<T, String>;
 
@@ -194,48 +192,6 @@ pub async fn close_all(app: AppHandle) {
             let _ = w.close();
         }
     }
-}
-
-#[tauri::command]
-pub async fn pick_and_open(app: AppHandle) -> Res<usize> {
-    let picked = app
-        .dialog()
-        .file()
-        .add_filter("Image", &["png", "jpg", "jpeg", "gif", "webp", "bmp"])
-        .blocking_pick_files()
-        .unwrap_or_default();
-    let images: Vec<ImageRef> = picked
-        .into_iter()
-        .filter_map(|p| p.into_path().ok())
-        .filter(|p| is_image_path(p))
-        .map(ImageRef::File)
-        .collect();
-    let n = images.len();
-    open_in_background(&app, images);
-    Ok(n)
-}
-
-#[tauri::command]
-pub async fn open_paths(paths: Vec<String>, app: AppHandle) -> usize {
-    let images: Vec<ImageRef> = paths
-        .into_iter()
-        .map(std::path::PathBuf::from)
-        .filter(|p| is_image_path(p) && p.is_file())
-        .map(ImageRef::File)
-        .collect();
-    let n = images.len();
-    open_in_background(&app, images);
-    n
-}
-
-#[tauri::command]
-pub async fn open_url_text(text: String, app: AppHandle) -> Res<()> {
-    let t = text.trim().to_string();
-    if !(t.starts_with("http://") || t.starts_with("https://")) {
-        return Err("http(s) 이미지 주소를 입력하세요".into());
-    }
-    open_in_background(&app, vec![ImageRef::Url { url: t, referer: None }]);
-    Ok(())
 }
 
 #[tauri::command]
