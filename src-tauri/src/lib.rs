@@ -130,7 +130,8 @@ pub fn run() {
             build_tray(&handle)?;
 
             // Keep the browser bridge registered (idempotent; follows a moved/updated exe).
-            if let Ok(exe) = std::env::current_exe() {
+            // PINIT_NO_REGISTER=1 lets test runs avoid hijacking a real installation's registration.
+            if let (Ok(exe), None) = (std::env::current_exe(), std::env::var_os("PINIT_NO_REGISTER")) {
                 let dir = paths::Paths::detect().data;
                 std::thread::spawn(move || {
                     if let Err(e) = native_host::register(&exe, &dir.join("native-host")) {

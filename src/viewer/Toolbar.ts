@@ -26,6 +26,7 @@ export class Toolbar {
       button("zoomOut", "축소 (-)", () => store.update((v) => zoomAt(v, 1 / 1.2, { x: 0, y: 0 }))),
       button("zoomIn", "확대 (+)", () => store.update((v) => zoomAt(v, 1.2, { x: 0, y: 0 }))),
       button("reset", "원래대로 (0)", () => store.set(defaultView())),
+      button("fit", "창을 이미지 비율에 맞춤", () => void ipc.viewerFit()),
       h("span", { class: "sep" }),
       button("download", "다른 이름으로 저장", () => void ipc.viewerSaveAs()),
       button("external", "원본 열기", () => void ipc.viewerOpenSource()),

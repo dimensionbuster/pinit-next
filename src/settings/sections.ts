@@ -243,6 +243,28 @@ export class AppearanceSection extends BaseSection {
           "테마",
         ),
       ),
+      field(
+        "이미지 뒤 배경",
+        "이미지 밖 빈 영역과 줌아웃·패닝 때 보이는 배경입니다.",
+        h(
+          "div",
+          { class: "row" },
+          h("button", { class: "chip", type: "button", "aria-pressed": s.backdrop_color === "#000000", onClick: () => m.patch({ backdrop_color: "#000000" }) }, "검정"),
+          h("button", { class: "chip", type: "button", "aria-pressed": s.backdrop_color === "#ffffff", onClick: () => m.patch({ backdrop_color: "#ffffff" }) }, "흰색"),
+          h("input", {
+            class: "color",
+            type: "color",
+            value: s.backdrop_color,
+            "aria-label": "배경 색",
+            onInput: (e) => m.patch({ backdrop_color: (e.target as HTMLInputElement).value }, false),
+          }),
+        ),
+      ),
+      field(
+        "배경 투명도",
+        `${Math.round(s.backdrop_opacity * 100)} %`,
+        rangeInput(0, 100, 5, Math.round(s.backdrop_opacity * 100), (v) => m.patch({ backdrop_opacity: v / 100 }, false), "배경 투명도", (v) => `${v} %`),
+      ),
       field("작업 표시줄에 이미지 창 표시", "다음에 여는 창부터 적용됩니다.", toggle(s.show_in_taskbar, "작업 표시줄에 표시", (v) => m.patch({ show_in_taskbar: v }))),
     );
   }

@@ -8,6 +8,7 @@ const PATHS = {
   flipV: '<path d="M3 12h18" stroke-dasharray="2 3"/><path d="M7 9l5-5.5L17 9z"/><path d="M7 15l5 5.5 5-5.5z"/>',
   zoomIn: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2M11 8v6M8 11h6"/>',
   zoomOut: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2M8 11h6"/>',
+  fit: '<rect x="6.5" y="7" width="11" height="10" rx="1.5"/><path d="M3 12h1.5M19.5 12H21M12 3v1.5M12 19.5V21"/>',
   reset: '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/>',
   download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/>',
   external:

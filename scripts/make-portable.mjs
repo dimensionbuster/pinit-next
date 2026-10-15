@@ -15,12 +15,19 @@ if (build.status !== 0 || !existsSync(exe)) {
   process.exit(build.status ?? 1);
 }
 
-rmSync(out, { recursive: true, force: true });
-mkdirSync(out, { recursive: true });
-copyFileSync(exe, join(out, "PinIt.exe"));
-writeFileSync(join(out, "portable.flag"), "");
+// If the previous build is still running (exe locked), write a timestamped folder instead.
+let target = out;
+try {
+  rmSync(out, { recursive: true, force: true });
+} catch {
+  target = `${out}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  console.warn(`${out} is in use (PinIt running?) -> writing to ${target}`);
+}
+mkdirSync(target, { recursive: true });
+copyFileSync(exe, join(target, "PinIt.exe"));
+writeFileSync(join(target, "portable.flag"), "");
 writeFileSync(
-  join(out, "README.txt"),
+  join(target, "README.txt"),
   [
     "PinIt portable",
     "",
@@ -33,4 +40,4 @@ writeFileSync(
     "",
   ].join("\r\n"),
 );
-console.log("portable folder:", out);
+console.log("portable folder:", target);

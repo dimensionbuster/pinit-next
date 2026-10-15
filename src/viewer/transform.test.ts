@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  cssTransform, defaultView, fitScale, imageBox, normalizeAngle, rotateQuarter, zoomAt, MAX_ZOOM,
+  backdropCss, cssTransform, defaultView, imageBox, normalizeAngle, rotateQuarter, zoomAt, MAX_ZOOM,
 } from "./transform.ts";
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
@@ -13,29 +13,10 @@ test("odd quarter turns swap the element box", () => {
   assert.deepEqual(imageBox({ w: 600, h: 300 }, 3), { w: 300, h: 600 });
 });
 
-test("fitScale: identity at 0/180, 1/sqrt2 at 45 on a square, shrinks wide boxes more", () => {
-  near(fitScale({ w: 100, h: 100 }, 0), 1);
-  near(fitScale({ w: 100, h: 100 }, 180), 1);
-  near(fitScale({ w: 100, h: 100 }, 45), Math.SQRT1_2);
-  assert.ok(fitScale({ w: 400, h: 100 }, 30) < fitScale({ w: 100, h: 100 }, 30));
-});
-
-test("rotated rectangle really fits inside the window after fitScale", () => {
-  for (const [w, h] of [[300, 300], [600, 300], [300, 600]]) {
-    for (let a = -180; a <= 180; a += 7) {
-      const s = fitScale({ w, h }, a);
-      const t = (a * Math.PI) / 180;
-      const bw = s * (w * Math.abs(Math.cos(t)) + h * Math.abs(Math.sin(t)));
-      const bh = s * (w * Math.abs(Math.sin(t)) + h * Math.abs(Math.cos(t)));
-      assert.ok(bw <= w + 1e-6 && bh <= h + 1e-6, `${w}x${h} @${a}`);
-    }
-  }
-});
-
 test("css transform order is flip, rotate, zoom, pan (right to left)", () => {
   const v = { ...defaultView(), zoom: 2, pan_x: 10, pan_y: -5, quarter_turns: 1, flip_h: true };
   assert.equal(
-    cssTransform(v, { w: 300, h: 300 }),
+    cssTransform(v),
     "translate(10px, -5px) scale(2) rotate(90deg) scale(-1, 1)",
   );
 });
@@ -56,4 +37,17 @@ test("angles normalise into (-180, 180] and quarter turns wrap", () => {
   assert.equal(normalizeAngle(725), 5);
   assert.equal(rotateQuarter(rotateQuarter(defaultView(), false), false).quarter_turns, 2);
   assert.equal(rotateQuarter({ ...defaultView(), quarter_turns: 3 }, true).quarter_turns, 0);
+});
+
+test("free rotation spins in place: zoom is never rescaled", () => {
+  for (const a of [0, 10, 45, 90, -135]) {
+    const css = cssTransform({ ...defaultView(), zoom: 1.5, fine_angle_deg: a });
+    assert.match(css, /scale\(1\.5\)/, `angle ${a}`);
+  }
+});
+
+test("backdropCss builds rgba and repairs bad input", () => {
+  assert.equal(backdropCss("#ffffff", 0.5), "rgba(255, 255, 255, 0.5)");
+  assert.equal(backdropCss("#102030", 2), "rgba(16, 32, 48, 1)");
+  assert.equal(backdropCss("javascript:x", NaN), "rgba(0, 0, 0, 0.4)");
 });

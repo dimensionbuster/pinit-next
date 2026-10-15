@@ -218,8 +218,9 @@ impl OpenService {
         }
     }
 
-    /// UI changed the view. If the effective aspect changed (quarter turn),
-    /// the window is refit around its centre and the new bounds are returned.
+    /// UI changed the view. If the effective aspect changed (quarter turn), the
+    /// window's width and height are swapped around its centre (so a window the
+    /// user shaped by hand keeps that shape) and the new bounds are returned.
     pub fn set_view(&mut self, id: WindowId, view: ViewState) -> Option<Rect> {
         let displays = self.displays.displays();
         let e = self.windows.iter_mut().find(|e| e.id == id)?;
@@ -234,7 +235,7 @@ impl OpenService {
             .find(|d| d.id == e.display_id)
             .map(|d| d.work_area)
             .unwrap_or(e.bounds);
-        let refit = refit(e.bounds, new_aspect, area);
+        let refit = refit(e.bounds, e.bounds.h as f64 / e.bounds.w as f64, area);
         e.bounds = refit;
         e.last_fit = refit;
         self.host.set_bounds(id, refit);
@@ -556,6 +557,11 @@ mod tests {
         v.rotate_quarter(true);
         let b = svc.set_view(1, v).expect("aspect changed");
         assert_eq!((b.w, b.h), (300, 600));
+        // a hand-shaped (non image-aspect) window keeps its shape, just swapped
+        svc.on_bounds_changed(1, Rect::new(10, 10, 500, 200));
+        v.rotate_quarter(true);
+        let b = svc.set_view(1, v).expect("aspect changed");
+        assert_eq!((b.w, b.h), (200, 500));
         assert_eq!(log.lock().unwrap().bounds.last(), Some(&(1, b)));
         // free-angle rotation never resizes
         v.set_fine_angle(20.0);

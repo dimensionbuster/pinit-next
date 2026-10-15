@@ -1,13 +1,14 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import "../design.css";
 import "./viewer.css";
-import { ipc } from "../ipc.ts";
+import { ipc, type Settings } from "../ipc.ts";
 import { h } from "../ui/dom.ts";
 import { KeyboardController, PointerController } from "./controllers.ts";
 import { createResizeGrips } from "./ResizeGrips.ts";
 import { Stage } from "./Stage.ts";
 import { Toolbar } from "./Toolbar.ts";
+import { backdropCss } from "./transform.ts";
 import { ViewStore } from "./ViewStore.ts";
 
 async function main(): Promise<void> {
@@ -18,12 +19,9 @@ async function main(): Promise<void> {
   new PointerController(stage, store);
   new KeyboardController(store);
 
-  // After the user resizes, snap the window back to the image's aspect ratio.
-  let fitTimer: ReturnType<typeof setTimeout> | undefined;
-  void getCurrentWindow().onResized(() => {
-    clearTimeout(fitTimer);
-    fitTimer = setTimeout(() => void ipc.viewerFit(), 250);
-  });
+  const applyBackdrop = (s: Settings) => stage.setBackdrop(backdropCss(s.backdrop_color, s.backdrop_opacity));
+  applyBackdrop(await ipc.getSettings());
+  await listen<Settings>("settings-changed", (e) => applyBackdrop(e.payload));
 
   const root = document.getElementById("root");
   if (!root) throw new Error("missing #root");

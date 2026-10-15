@@ -56,6 +56,10 @@ pub struct Settings {
     pub jigsaw_max_scale: f64,
     pub preferred_display: Option<u64>,
     pub show_in_taskbar: bool,
+    /// Colour (#rrggbb) painted behind the image inside every viewer window.
+    pub backdrop_color: String,
+    /// 0.0 (invisible) ..= 1.0 (opaque).
+    pub backdrop_opacity: f64,
 }
 
 impl Default for Settings {
@@ -71,11 +75,26 @@ impl Default for Settings {
             jigsaw_max_scale: 1.4,
             preferred_display: None,
             show_in_taskbar: false,
+            backdrop_color: "#000000".into(),
+            backdrop_opacity: 0.4,
         }
     }
 }
 
 impl Settings {
+    /// Clamp/repair values that came from the UI or a hand-edited file.
+    pub fn sanitized(mut self) -> Self {
+        let c = self.backdrop_color.as_bytes();
+        let valid = c.len() == 7 && c[0] == b'#' && c[1..].iter().all(u8::is_ascii_hexdigit);
+        if !valid {
+            self.backdrop_color = Settings::default().backdrop_color;
+        }
+        self.backdrop_color.make_ascii_lowercase();
+        self.backdrop_opacity =
+            if self.backdrop_opacity.is_finite() { self.backdrop_opacity.clamp(0.0, 1.0) } else { 0.4 };
+        self
+    }
+
     pub fn layout_config(&self) -> LayoutConfig {
         let corner = match self.corner.as_str() {
             "topleft" => Corner::TopLeft,
@@ -100,7 +119,7 @@ pub struct SettingsFile(pub PathBuf);
 
 impl SettingsFile {
     pub fn load(&self) -> Settings {
-        read_json(&self.0).unwrap_or_default()
+        read_json::<Settings>(&self.0).unwrap_or_default().sanitized()
     }
 
     pub fn save(&self, s: &Settings) -> std::io::Result<()> {
@@ -230,6 +249,20 @@ mod tests {
         let s = f.load();
         assert_eq!((s.theme, s.grid_line), (Theme::Dark, 440));
         assert_eq!(s.jigsaw_base, 300); // untouched fields fall back to defaults
+    }
+
+    #[test]
+    fn backdrop_values_are_sanitised() {
+        let mut s = Settings::default();
+        s.backdrop_color = "red; background:url(x)".into();
+        s.backdrop_opacity = 7.0;
+        let s = s.sanitized();
+        assert_eq!((s.backdrop_color.as_str(), s.backdrop_opacity), ("#000000", 1.0));
+        let mut s = Settings::default();
+        s.backdrop_color = "#FFAA00".into();
+        s.backdrop_opacity = f64::NAN;
+        let s = s.sanitized();
+        assert_eq!((s.backdrop_color.as_str(), s.backdrop_opacity), ("#ffaa00", 0.4));
     }
 
     #[test]

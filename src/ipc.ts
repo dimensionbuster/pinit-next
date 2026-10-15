@@ -35,6 +35,8 @@ export interface Settings {
   jigsaw_max_scale: number;
   preferred_display: number | null;
   show_in_taskbar: boolean;
+  backdrop_color: string;
+  backdrop_opacity: number;
 }
 
 export interface DisplayInfo {

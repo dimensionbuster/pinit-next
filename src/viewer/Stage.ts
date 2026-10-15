@@ -21,6 +21,11 @@ export class Stage {
     this.render();
   }
 
+  /** Paint the area behind/around the image (visible when panned, zoomed out or letterboxed). */
+  setBackdrop(css: string): void {
+    this.el.style.background = css;
+  }
+
   windowBox(): Box {
     return { w: this.el.clientWidth, h: this.el.clientHeight };
   }
@@ -38,6 +43,6 @@ export class Stage {
     const box = imageBox(win, v.quarter_turns);
     this.img.style.width = `${box.w}px`;
     this.img.style.height = `${box.h}px`;
-    this.img.style.transform = cssTransform(v, win);
+    this.img.style.transform = cssTransform(v);
   }
 }

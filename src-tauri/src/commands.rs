@@ -8,7 +8,7 @@
 use pinit_core::image_ref::ImageRef;
 use pinit_core::ports::Display;
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -87,10 +87,12 @@ pub async fn get_settings(state: State<'_, AppState>) -> Res<Settings> {
 }
 
 #[tauri::command]
-pub async fn set_settings(settings: Settings, state: State<'_, AppState>) -> Res<Settings> {
+pub async fn set_settings(settings: Settings, app: AppHandle, state: State<'_, AppState>) -> Res<Settings> {
+    let settings = settings.sanitized();
     state.settings_file.save(&settings).map_err(|e| e.to_string())?;
     state.service.lock().unwrap().set_config(settings.layout_config());
     *state.settings.lock().unwrap() = settings.clone();
+    let _ = app.emit("settings-changed", &settings); // open viewers re-apply the backdrop live
     Ok(settings)
 }
 

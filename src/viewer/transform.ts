@@ -18,26 +18,16 @@ export function imageBox(win: Box, quarterTurns: number): Box {
   return quarterTurns % 2 === 1 ? { w: win.h, h: win.w } : { w: win.w, h: win.h };
 }
 
-/** Scale that keeps a win-sized rectangle rotated by `angleDeg` inside the window. */
-export function fitScale(win: Box, angleDeg: number): number {
-  const t = (angleDeg * Math.PI) / 180;
-  const c = Math.abs(Math.cos(t));
-  const s = Math.abs(Math.sin(t));
-  const sx = win.w / (win.w * c + win.h * s);
-  const sy = win.h / (win.w * s + win.h * c);
-  return Math.min(1, sx, sy);
-}
-
 /**
  * CSS transform for the image element (centred by layout).
  * Order matches core::view_state: flip -> rotate -> zoom -> pan.
+ * Free rotation never rescales the image: it spins in place at the current zoom.
  */
-export function cssTransform(v: ViewState, win: Box): string {
-  const fit = v.fine_angle_deg === 0 ? 1 : fitScale(win, v.fine_angle_deg);
+export function cssTransform(v: ViewState): string {
   const angle = v.quarter_turns * 90 + v.fine_angle_deg;
   const fx = v.flip_h ? -1 : 1;
   const fy = v.flip_v ? -1 : 1;
-  return `translate(${round(v.pan_x)}px, ${round(v.pan_y)}px) scale(${round(v.zoom * fit)}) rotate(${round(angle)}deg) scale(${fx}, ${fy})`;
+  return `translate(${round(v.pan_x)}px, ${round(v.pan_y)}px) scale(${round(v.zoom)}) rotate(${round(angle)}deg) scale(${fx}, ${fy})`;
 }
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
@@ -63,4 +53,12 @@ export function normalizeAngle(deg: number): number {
 
 export function rotateQuarter(v: ViewState, clockwise: boolean): ViewState {
   return { ...v, quarter_turns: (v.quarter_turns + (clockwise ? 1 : 3)) % 4 };
+}
+
+/** CSS colour for the viewer backdrop from a `#rrggbb` string and 0..1 opacity (falls back to black). */
+export function backdropCss(color: string, opacity: number): string {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  const [r, g, b] = m ? [m[1], m[2], m[3]].map((x) => parseInt(x, 16)) : [0, 0, 0];
+  const a = Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : 0.4;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
