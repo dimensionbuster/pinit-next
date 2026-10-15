@@ -183,3 +183,11 @@ pub fn quit(app: AppHandle) {
     crate::app::set_quitting(&app);
     app.exit(0);
 }
+
+/// Shows the bundled browser extension folder so the user can "Load unpacked".
+#[tauri::command]
+pub fn reveal_extension(app: AppHandle) -> Res<()> {
+    let dest = crate::paths::Paths::detect().data.join("extension");
+    let manifest = crate::extension_bundle::extract(&dest).map_err(|e| e.to_string())?;
+    app.opener().reveal_item_in_dir(manifest).map_err(|e| e.to_string())
+}

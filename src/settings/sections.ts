@@ -199,6 +199,30 @@ function anchorPicker(current: Corner, onPick: (c: Corner) => void): HTMLElement
   );
 }
 
+export class BrowserSection extends BaseSection {
+  protected build(): HTMLElement {
+    const step = (n: number, text: string) =>
+      h("li", {}, h("span", { class: "step-n" }, String(n)), h("span", {}, text));
+    return card(
+      "브라우저 연동",
+      h("div", { class: "caption" }, "Chrome · Edge · Brave에서 이미지를 우클릭해 바로 열 수 있습니다. 한 번만 설치하면 됩니다."),
+      h(
+        "ol",
+        { class: "steps" },
+        step(1, "아래 버튼으로 확장 폴더를 엽니다."),
+        step(2, "브라우저에서 chrome://extensions 를 열고 개발자 모드를 켭니다."),
+        step(3, "‘압축해제된 확장 프로그램을 로드합니다’로 열린 폴더를 선택합니다."),
+        step(4, "이미지 우클릭 → ‘PinIt으로 열기’"),
+      ),
+      h(
+        "div",
+        { class: "row" },
+        h("button", { class: "btn", type: "button", onClick: () => void ipc.revealExtension().catch((e) => toast(String(e))) }, icon("folder"), "확장 폴더 열기"),
+      ),
+    );
+  }
+}
+
 export class AppearanceSection extends BaseSection {
   protected build(): HTMLElement {
     const s = this.model.settings;

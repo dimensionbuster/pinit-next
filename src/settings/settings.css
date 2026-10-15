@@ -49,3 +49,10 @@
   .field { flex-direction: column; align-items: flex-start; gap: 8px; }
   .page-head { flex-direction: column; align-items: flex-start; }
 }
+
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.steps li { display: flex; gap: 10px; align-items: baseline; }
+.step-n {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; flex: none; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--text-muted);
+}

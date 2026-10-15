@@ -49,8 +49,8 @@ fn make_resolver(cache: &std::path::Path) -> ChainResolver {
 
 impl AppState {
     pub fn build(app: &AppHandle) -> tauri::Result<Self> {
-        let data = app.path().app_data_dir()?;
-        let cache = app.path().app_cache_dir()?.join("images");
+        let paths = crate::paths::Paths::detect();
+        let (data, cache) = (paths.data, paths.cache);
         let settings_file = SettingsFile(data.join("settings.json"));
         let settings = settings_file.load();
         let registry: Registry = Arc::new(Mutex::new(HashMap::new()));
@@ -152,6 +152,7 @@ pub fn open_in_background(app: &AppHandle, images: Vec<ImageRef>) {
         let state = app.state::<AppState>();
         for image in images {
             if let Err(e) = state.open_one(image, None) {
+                eprintln!("open failed: {e}");
                 let _ = app.emit("toast", format!("열 수 없음: {e}"));
             }
         }

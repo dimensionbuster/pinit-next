@@ -63,5 +63,6 @@ export const ipc = {
   pickAndOpen: () => invoke<number>("pick_and_open"),
   openUrlText: (text: string) => invoke<void>("open_url_text", { text }),
   openPaths: (paths: string[]) => invoke<number>("open_paths", { paths }),
+  revealExtension: () => invoke<void>("reveal_extension"),
   quit: () => invoke<void>("quit"),
 };

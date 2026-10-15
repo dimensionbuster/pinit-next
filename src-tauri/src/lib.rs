@@ -1,7 +1,11 @@
 pub mod adapters;
 pub mod app;
+pub mod b64;
 pub mod cli;
 pub mod commands;
+pub mod extension_bundle;
+pub mod native_host;
+pub mod paths;
 
 use std::sync::atomic::Ordering;
 
@@ -87,7 +91,13 @@ pub fn run() {
     // One shared renderer for all same-origin image windows (see docs/SPIKES.md:
     // 20 windows 1.3 GB -> 0.4 GB). Must be set before any webview exists.
     // SAFETY: called once at startup before other threads are spawned.
+    let paths = paths::Paths::detect();
     unsafe {
+        if let Some(profile) = &paths.webview {
+            // Portable mode: keep the WebView2 profile next to the exe, not in AppData.
+            let _ = std::fs::create_dir_all(profile);
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", profile);
+        }
         let extra = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").unwrap_or_default();
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", format!("{extra} --process-per-site"));
     }
@@ -108,6 +118,16 @@ pub fn run() {
             let state = AppState::build(&handle)?;
             app.manage(state);
             build_tray(&handle)?;
+
+            // Keep the browser bridge registered (idempotent; follows a moved/updated exe).
+            if let Ok(exe) = std::env::current_exe() {
+                let dir = paths::Paths::detect().data;
+                std::thread::spawn(move || {
+                    if let Err(e) = native_host::register(&exe, &dir.join("native-host")) {
+                        eprintln!("native host registration failed: {e}");
+                    }
+                });
+            }
 
             let args: Vec<String> = std::env::args().skip(1).collect();
             let images = parse_open_args(&args);
@@ -136,6 +156,7 @@ pub fn run() {
             commands::pick_and_open,
             commands::open_paths,
             commands::open_url_text,
+            commands::reveal_extension,
             commands::quit,
         ])
         .build(tauri::generate_context!())

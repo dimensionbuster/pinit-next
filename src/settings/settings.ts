@@ -5,7 +5,7 @@ import "./settings.css";
 import { ipc } from "../ipc.ts";
 import { h } from "../ui/dom.ts";
 import { SettingsModel } from "./SettingsModel.ts";
-import { AppearanceSection, ArrangeSection, Header, OpenSection } from "./sections.ts";
+import { AppearanceSection, ArrangeSection, BrowserSection, Header, OpenSection } from "./sections.ts";
 import { toast } from "./widgets.ts";
 
 async function main(): Promise<void> {
@@ -19,6 +19,7 @@ async function main(): Promise<void> {
     new OpenSection(model).init(),
     new ArrangeSection(model).init(),
     new AppearanceSection(model).init(),
+    new BrowserSection(model).init(),
   ];
   root.append(h("main", { class: "page" }, ...sections.map((s) => s.el)), dropHint);
 
