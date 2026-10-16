@@ -86,19 +86,29 @@ test("rotateAboutCenter turns the picture about the window centre", () => {
   near(a.y, b.x * Math.sin(r) + b.y * Math.cos(r));
 });
 
-test("anchorOnResize keeps on-screen scale and picture centre", () => {
-  const v = { ...defaultView(), zoom: 1.5, pan_x: 12, pan_y: -8 };
-  const win0 = { w: 400, h: 300 };
-  const win1 = { w: 700, h: 300 };
+test("anchorOnResize keeps on-screen scale and picture centre for every grip, rotated or not", () => {
   const nat = { w: 800, h: 600 };
-  const fit0 = fitScale(win0, 0, nat);
-  const fit1 = fitScale(win1, 0, nat);
-  const c0 = { x: 1000 + win0.w / 2, y: 500 + win0.h / 2 };
-  const c1 = { x: 900 + win1.w / 2, y: 500 + win1.h / 2 }; // west edge dragged left
-  const out = anchorOnResize(v, fit0, c0, fit1, c1);
-  near(fit1 * out.zoom, fit0 * v.zoom);
-  near(c1.x + out.pan_x, c0.x + v.pan_x);
-  near(c1.y + out.pan_y, c0.y + v.pan_y);
+  const views = [
+    { ...defaultView(), zoom: 1.5, pan_x: 12, pan_y: -8 },
+    { ...defaultView(), zoom: 0.7, pan_x: -40, pan_y: 25, quarter_turns: 1, fine_angle_deg: 30, flip_h: true },
+  ];
+  for (const v of views) {
+    for (const west of [true, false]) {
+      for (const north of [true, false]) {
+        const from = { w: 400, h: 300 };
+        const to = { w: 650, h: 220 };
+        // window origin on screen; the edge opposite the dragged one stays put
+        const o0 = { x: 1000, y: 500 };
+        const o1 = { x: west ? o0.x + from.w - to.w : o0.x, y: north ? o0.y + from.h - to.h : o0.y };
+        const fit0 = fitScale(from, v.quarter_turns, nat);
+        const fit1 = fitScale(to, v.quarter_turns, nat);
+        const out = anchorOnResize(v, from, to, fit0, fit1, { west, north });
+        near(fit1 * out.zoom, fit0 * v.zoom);
+        near(o1.x + to.w / 2 + out.pan_x, o0.x + from.w / 2 + v.pan_x);
+        near(o1.y + to.h / 2 + out.pan_y, o0.y + from.h / 2 + v.pan_y);
+      }
+    }
+  }
 });
 
 test("backdropCss builds rgba and repairs bad input", () => {

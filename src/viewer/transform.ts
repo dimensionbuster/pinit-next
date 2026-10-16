@@ -89,22 +89,25 @@ export function fitScale(win: Box, quarterTurns: number, natural: Box): number {
 }
 
 /**
- * Window was resized: keep the picture fixed on screen so only the mask edge moves.
- * `fit0/c0` describe the window when the resize began (fit scale, screen centre),
- * `fit1/c1` the window now. On-screen scale = fit * zoom, picture centre = centre + pan.
+ * The window grew or shrank from `from` to `to` (fit scales `fitFrom`/`fitTo`): keep the
+ * picture fixed on screen so only the mask edge moves. On-screen scale = fit * zoom and the
+ * picture centre = window centre + pan. The OS keeps the edge opposite to the dragged one
+ * still, so the window centre moves by half the size change toward the dragged side:
+ * no screen coordinates are needed, and rotation or flips do not matter.
  */
 export function anchorOnResize(
-  v0: ViewState,
-  fit0: number,
-  c0: { x: number; y: number },
-  fit1: number,
-  c1: { x: number; y: number },
+  v: ViewState,
+  from: Box,
+  to: Box,
+  fitFrom: number,
+  fitTo: number,
+  grip: { west: boolean; north: boolean },
 ): ViewState {
   return {
-    ...v0,
-    zoom: (v0.zoom * fit0) / fit1,
-    pan_x: v0.pan_x + c0.x - c1.x,
-    pan_y: v0.pan_y + c0.y - c1.y,
+    ...v,
+    zoom: (v.zoom * fitFrom) / fitTo,
+    pan_x: v.pan_x + ((grip.west ? 1 : -1) * (to.w - from.w)) / 2,
+    pan_y: v.pan_y + ((grip.north ? 1 : -1) * (to.h - from.h)) / 2,
   };
 }
 

@@ -14,7 +14,7 @@ export function createResizeGrips(anchor: ResizeAnchor): HTMLElement[] {
       onPointerDown: (e) => {
         if ((e as PointerEvent).button !== 0) return;
         e.preventDefault();
-        anchor.begin();
+        anchor.begin(dir);
         void getCurrentWindow().startResizeDragging(dir);
       },
     }),
