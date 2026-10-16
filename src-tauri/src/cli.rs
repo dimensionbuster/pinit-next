@@ -16,6 +16,15 @@ pub fn is_image_path(p: &std::path::Path) -> bool {
         .is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
+/// Video files PinIt plays itself (what WebView2 decodes without extra codecs).
+pub const VIDEO_EXTS: [&str; 5] = ["mp4", "webm", "m4v", "mov", "ogv"];
+
+pub fn is_video_path(p: &std::path::Path) -> bool {
+    p.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| VIDEO_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+}
+
 pub fn has_flag(args: &[String], flag: &str) -> bool {
     args.iter().any(|a| a == flag)
 }
@@ -47,7 +56,7 @@ pub fn parse_open_args(args: &[String]) -> Vec<ImageRef> {
             a if a.starts_with('-') => {}
             a => {
                 let p = PathBuf::from(a);
-                if is_image_path(&p) && p.is_file() {
+                if (is_image_path(&p) || is_video_path(&p)) && p.is_file() {
                     out.push(ImageRef::File(p));
                 }
             }
@@ -92,6 +101,15 @@ mod tests {
             "--unknown-flag",
         ]);
         assert_eq!(parse_open_args(&args), vec![ImageRef::File(img)]);
+    }
+
+    #[test]
+    fn video_files_are_accepted() {
+        let dir = std::env::temp_dir().join(format!("pinit-cli-v-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let v = dir.join("clip.MP4");
+        std::fs::write(&v, b"x").unwrap();
+        assert_eq!(parse_open_args(&a(&[v.to_str().unwrap()])), vec![ImageRef::File(v)]);
     }
 
     #[test]

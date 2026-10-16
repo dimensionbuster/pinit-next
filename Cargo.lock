@@ -2508,7 +2508,7 @@ version = "0.1.0"
 
 [[package]]
 name = "pinit-next"
-version = "0.2.2"
+version = "0.3.1"
 dependencies = [
  "pinit-core",
  "serde",
@@ -2519,6 +2519,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "ureq",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -88,8 +88,17 @@ impl AppState {
 
     /// Resolve (possibly slow, lock-free) then open. Never call on the UI thread.
     pub fn open_one(&self, image: ImageRef, restore: Option<Restore>) -> Result<(), String> {
-        if self.service.lock().unwrap().find_open(&image).is_some() {
-            return Ok(());
+        self.open_with_id(image, restore).map(|_| ())
+    }
+
+    /// Like [`open_one`](Self::open_one), returning the window showing the image.
+    pub fn open_one_id(&self, image: ImageRef) -> Result<WindowId, String> {
+        self.open_with_id(image, None)
+    }
+
+    fn open_with_id(&self, image: ImageRef, restore: Option<Restore>) -> Result<WindowId, String> {
+        if let Some(id) = self.service.lock().unwrap().find_open(&image) {
+            return Ok(id);
         }
         let resolved = self.resolver.resolve(&image).map_err(|e| e.to_string())?;
         let outcome = self
@@ -98,10 +107,13 @@ impl AppState {
             .unwrap()
             .open_resolved(resolved, restore)
             .map_err(|e| e.to_string())?;
-        if matches!(outcome, OpenOutcome::Opened(_)) {
-            self.send(Msg::Dirty);
+        match outcome {
+            OpenOutcome::Opened(id) => {
+                self.send(Msg::Dirty);
+                Ok(id)
+            }
+            OpenOutcome::AlreadyOpen(id) => Ok(id),
         }
-        Ok(())
     }
 }
 
@@ -169,7 +181,7 @@ pub fn open_saved_in_background(app: &AppHandle, saved: Vec<SavedWindow>) {
     std::thread::spawn(move || {
         let state = app.state::<AppState>();
         for w in saved {
-            let restore = Restore { bounds: w.bounds, view: w.view };
+            let restore = Restore { bounds: w.bounds, view: w.view, user_sized: w.user_sized };
             if let Err(e) = state.open_one(w.image, Some(restore)) {
                 eprintln!("restore failed: {e}");
             }

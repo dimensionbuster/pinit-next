@@ -108,7 +108,11 @@ impl Settings {
             "bottomright" => Corner::BottomRight,
             _ => Corner::TopRight,
         };
-        let flow = if self.flow == "columns" { Flow::Columns } else { Flow::Rows };
+        let flow = match self.flow.as_str() {
+            "columns" => Flow::Columns,
+            "diagonal" => Flow::Diagonal,
+            _ => Flow::Rows,
+        };
         let mode = match self.mode {
             ModeKind::Grid => LayoutMode::Grid { line: self.grid_line.clamp(80, 1600) },
             ModeKind::Jigsaw => {
@@ -158,6 +162,9 @@ struct SavedDto {
     image: ImageDto,
     bounds: [i32; 4],
     view: ViewDto,
+    /// Absent in older session files = not hand-sized.
+    #[serde(default)]
+    user_sized: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -170,6 +177,8 @@ impl SavedDto {
     fn from_core(w: &SavedWindow) -> Option<Self> {
         let image = match &w.image {
             ImageRef::Url { url, referer } => ImageDto::Url { url: url.clone(), referer: referer.clone() },
+            // the staged first frame of a live video: the stream is gone after a restart
+            ImageRef::File(path) if crate::video_bridge::is_stream_still(path) => return None,
             ImageRef::File(path) => ImageDto::File { path: path.clone() },
             ImageRef::Bytes { .. } => return None, // service persists these as cached files
         };
@@ -186,6 +195,7 @@ impl SavedDto {
                 flip_h: v.flip_h,
                 flip_v: v.flip_v,
             },
+            user_sized: w.user_sized,
         })
     }
 
@@ -208,6 +218,7 @@ impl SavedDto {
                 flip_h: v.flip_h,
                 flip_v: v.flip_v,
             },
+            user_sized: self.user_sized,
         }
     }
 }
@@ -306,11 +317,13 @@ mod tests {
                 image: ImageRef::Url { url: "https://e.com/a.jpg".into(), referer: Some("https://e.com/".into()) },
                 bounds: Rect::new(-1920, 40, 600, 300),
                 view,
+                user_sized: true,
             },
             SavedWindow {
                 image: ImageRef::File(PathBuf::from(r"C:\pics\b.png")),
                 bounds: Rect::new(0, 0, 300, 300),
                 view: ViewState::default(),
+                user_sized: false,
             },
         ];
         store.save(&saved);
@@ -323,6 +336,7 @@ mod tests {
             image: ImageRef::Url { url: "https://e.com/a.jpg".into(), referer: None },
             bounds: Rect::new(10, 20, 300, 200),
             view: ViewState::default(),
+            user_sized: false,
         }];
         assert_eq!(decode_layout(&encode_layout(&saved)), Some(saved));
         assert_eq!(decode_layout(b"{}"), None);

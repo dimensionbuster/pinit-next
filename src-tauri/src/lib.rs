@@ -1,4 +1,5 @@
 pub mod adapters;
+pub mod anchor;
 pub mod app;
 pub mod b64;
 pub mod cli;
@@ -7,8 +8,11 @@ pub mod date;
 pub mod extension_bundle;
 pub mod native_host;
 pub mod paths;
+pub mod pipe;
 pub mod shell_menu;
 pub mod update;
+pub mod video_bridge;
+pub mod video_host;
 
 use std::sync::atomic::Ordering;
 
@@ -113,8 +117,10 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
             if let (Ok(p), Ok(s)) = (window.outer_position(), window.outer_size()) {
                 state.send(Msg::Bounds(id, Rect::new(p.x, p.y, s.width as i32, s.height as i32)));
             }
+            anchor::on_geometry(window);
         }
         WindowEvent::Destroyed => {
+            anchor::detach(label);
             // On app exit keep the layout; only a user close forgets the window.
             if !state.quitting.load(Ordering::SeqCst) {
                 state.send(Msg::Closed(id));
@@ -151,6 +157,12 @@ pub fn run() {
             let state = AppState::build(&handle)?;
             app.manage(state);
             build_tray(&handle)?;
+            {
+                let paths = paths::Paths::detect();
+                if let Err(e) = video_bridge::start(&handle, &paths.inbox) {
+                    eprintln!("video bridge unavailable: {e}");
+                }
+            }
             if cfg!(debug_assertions) {
                 if let Some(w) = handle.get_webview_window("main") {
                     let _ = w.set_title("PinIt (DEV)");
@@ -180,6 +192,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::viewer_init,
             commands::viewer_set_view,
+            commands::viewer_pin,
+            commands::viewer_log,
             commands::viewer_fit,
             commands::viewer_close,
             commands::viewer_open_source,
@@ -193,6 +207,7 @@ pub fn run() {
             commands::save_all,
             commands::open_url_text,
             commands::open_dropped,
+            commands::viewer_video_size,
             commands::export_layout,
             commands::import_layout,
             commands::reveal_extension,

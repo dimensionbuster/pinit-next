@@ -96,6 +96,8 @@ pub struct SavedWindow {
     pub image: ImageRef,
     pub bounds: Rect,
     pub view: ViewState,
+    /// The user resized this window by hand ("keep sizes" re-layout leaves it alone).
+    pub user_sized: bool,
 }
 
 pub trait LayoutStore {

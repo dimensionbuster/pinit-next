@@ -41,5 +41,5 @@ bottom-center tool pill: rotate ←/→, flip H/V, zoom −/+, reset, save, open
 appears when free rotation is non-zero (click to reset).
 
 ## Keyboard (viewer)
-`R` / `Shift+R` rotate 90° · `H` / `V` flip · `Alt+wheel` free rotate (Shift = 15° steps) ·
+hold `R` + drag rotate about the window centre · `H` / `V` flip about the window centre (screen axes) ·
 wheel zoom · `Space+drag` or middle-drag pan · `0` reset · `Esc` close overlay focus.

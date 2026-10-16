@@ -55,6 +55,80 @@ export function rotateQuarter(v: ViewState, clockwise: boolean): ViewState {
   return { ...v, quarter_turns: (v.quarter_turns + (clockwise ? 1 : 3)) % 4 };
 }
 
+/**
+ * Mirror the whole view about the window centre, in screen axes: the picture
+ * you see is flipped left/right (`h`) or up/down (`v`) wherever it is panned or
+ * rotated. M·Rot(a)·F = Rot(-a)·M·F, so the angle is negated and the flip toggled.
+ */
+export function flipScreen(v: ViewState, axis: "h" | "v"): ViewState {
+  const q = (4 - v.quarter_turns) % 4;
+  const fine = v.fine_angle_deg === 0 ? 0 : normalizeAngle(-v.fine_angle_deg);
+  return axis === "h"
+    ? { ...v, flip_h: !v.flip_h, quarter_turns: q, fine_angle_deg: fine, pan_x: -v.pan_x }
+    : { ...v, flip_v: !v.flip_v, quarter_turns: q, fine_angle_deg: fine, pan_y: -v.pan_y };
+}
+
+/** Rotate the whole view by `deg` (clockwise) about the window centre. */
+export function rotateAboutCenter(v: ViewState, deg: number): ViewState {
+  const r = (deg * Math.PI) / 180;
+  const cos = Math.cos(r);
+  const sin = Math.sin(r);
+  return {
+    ...v,
+    fine_angle_deg: normalizeAngle(v.fine_angle_deg + deg),
+    pan_x: v.pan_x * cos - v.pan_y * sin,
+    pan_y: v.pan_x * sin + v.pan_y * cos,
+  };
+}
+
+/** Scale at which the unzoomed image fits (object-fit: contain) a window of `win`. */
+export function fitScale(win: Box, quarterTurns: number, natural: Box): number {
+  if (natural.w <= 0 || natural.h <= 0) return 0;
+  const box = imageBox(win, quarterTurns);
+  return Math.min(box.w / natural.w, box.h / natural.h);
+}
+
+/**
+ * Zoomed or rotated by the user. Only such windows pin the picture on screen while the window is
+ * resized; any other window (including one reset with "원래대로") lets the picture follow the window.
+ * Panning and flipping alone do not count. Matches `Entry::is_touched` in the core service.
+ */
+export function isTouched(v: ViewState): boolean {
+  return v.zoom !== 1 || v.quarter_turns !== 0 || v.fine_angle_deg !== 0;
+}
+
+/** Where the window sits inside the page surface, in CSS px. */
+export interface Frame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * The window moved/resized inside a surface that stayed put on screen: keep the picture where it
+ * is. Its centre in surface coordinates is frame centre + pan, its on-screen scale is
+ * fit * zoom; both are held, so `pan` absorbs the frame centre shift and `zoom` the change of
+ * the contain-fit scale. `origin` is how far the surface origin itself moved on screen (zero
+ * unless the surface had to grow westwards/northwards past its margin); the picture's centre in
+ * surface coordinates then moves the opposite way.
+ */
+export function anchorOnFrame(
+  v0: ViewState,
+  fit0: number,
+  f0: Frame,
+  fit1: number,
+  f1: Frame,
+  origin: { x: number; y: number } = { x: 0, y: 0 },
+): ViewState {
+  return {
+    ...v0,
+    zoom: fit0 > 0 && fit1 > 0 ? (v0.zoom * fit0) / fit1 : v0.zoom,
+    pan_x: v0.pan_x + (f0.x + f0.w / 2) - origin.x - (f1.x + f1.w / 2),
+    pan_y: v0.pan_y + (f0.y + f0.h / 2) - origin.y - (f1.y + f1.h / 2),
+  };
+}
+
 /** CSS colour for the viewer backdrop from a `#rrggbb` string and 0..1 opacity (falls back to black). */
 export function backdropCss(color: string, opacity: number): string {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);

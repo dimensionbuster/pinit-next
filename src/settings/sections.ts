@@ -91,6 +91,7 @@ export class ArrangeSection extends BaseSection {
           [
             { value: "rows", label: "가로로" },
             { value: "columns", label: "세로로" },
+            { value: "diagonal", label: "대각선으로" },
           ],
           s.flow,
           (flow) => m.patch({ flow }),

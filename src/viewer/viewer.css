@@ -2,8 +2,14 @@
 html, body { background: transparent; overflow: hidden; user-select: none; }
 #root { position: fixed; inset: 0; }
 
-.stage { position: absolute; inset: 0; overflow: hidden; cursor: grab; background: transparent; }
+/* Not clipped to the frame: the window itself clips (natively, with no lag), so a strip the window
+   has just uncovered already shows picture and backdrop before the page learns the new frame. */
+.stage { position: absolute; inset: 0; cursor: grab; }
 .stage.pan-mode { cursor: move; }
+/* R held (Photoshop-style): drag to rotate about the window centre */
+.stage.rotate-mode {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5' stroke='black' stroke-width='4'/%3E%3Cpath d='M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 12 12, crosshair;
+}
 .image {
   /* centred with the standalone `translate` property so `transform` stays flip/rotate/zoom/pan only */
   position: absolute; left: 50%; top: 50%; translate: -50% -50%;
@@ -35,13 +41,26 @@ html, body { background: transparent; overflow: hidden; user-select: none; }
 }
 .tb-btn.close:hover { background: rgba(214, 64, 58, 0.85); }
 
+.tb-btn.more {
+  display: none; position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.overlay.compact .tb-btn.more { display: grid; }
+.overlay.compact.expanded .tb-btn.more { display: none; }
+
 .pill {
   position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+  opacity: 0; pointer-events: none; transition: opacity var(--t-med);
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px;
-  max-width: calc(100% - 16px); padding: 4px; border-radius: 12px; pointer-events: auto;
+  max-width: calc(100% - 16px); padding: 4px; border-radius: 12px;
   background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
+/* pill: revealed near the bottom edge, or on demand in compact windows */
+.overlay.near-bottom:not(.compact) .pill, .overlay:not(.compact) .pill:hover,
+.overlay:not(.compact) .pill:focus-within, .overlay.compact.expanded .pill { opacity: 1; pointer-events: auto; }
+/* a child's own `pointer-events: auto` would otherwise win over the hidden pill's `none` */
+.pill .tb-btn { pointer-events: inherit; }
 .sep { width: 1px; height: 16px; margin: 0 3px; background: rgba(255, 255, 255, 0.16); }
 
 .angle-chip {

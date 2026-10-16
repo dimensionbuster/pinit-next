@@ -6,7 +6,7 @@ use std::fmt;
 use crate::geometry::{Point, Rect};
 use crate::image_ref::ImageRef;
 use crate::placement::{
-    relayout, Anchor, FrontierPlacement, PlacementRequest, PlacementStrategy, SizeRule,
+    relayout_mixed, Anchor, FrontierPlacement, PlacementRequest, PlacementStrategy, Slot, SizeRule,
 };
 use crate::ports::{
     Display, DisplayId, DisplayProvider, HostError, ImageResolver, ResolveError, ResolvedImage,
@@ -50,6 +50,7 @@ impl LayoutConfig {
 pub struct Restore {
     pub bounds: Rect,
     pub view: ViewState,
+    pub user_sized: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,13 +93,26 @@ struct Entry {
     /// Last bounds the service itself set (open/refit/relayout/fit); lets
     /// `fit_to_aspect` tell which side the user dragged.
     last_fit: Rect,
+    /// The user resized this window by hand (size drifted from `last_fit`).
+    user_sized: bool,
     view: ViewState,
     natural_aspect: f64,
 }
 
+/// Slack for the OS rounding a size the service asked for (DPI, min size).
+const SIZE_TOLERANCE: i32 = 4;
+
 impl Entry {
     fn aspect(&self) -> f64 {
         self.view.effective_aspect(self.natural_aspect)
+    }
+
+    /// Zoomed or rotated: "keep current size" leaves it alone. Moving or resizing
+    /// the window alone, or resetting the view, does not count.
+    fn is_touched(&self) -> bool {
+        (self.view.zoom - 1.0).abs() > 1e-6
+            || self.view.quarter_turns != 0
+            || self.view.fine_angle_deg.abs() > 1e-6
     }
 }
 
@@ -156,6 +170,7 @@ impl OpenService {
             .aspect()
             .ok_or_else(|| OpenError::Resolve(ResolveError::Failed("image has no size".into())))?;
         let view = restore.as_ref().map(|r| r.view).unwrap_or_default();
+        let user_sized = restore.as_ref().is_some_and(|r| r.user_sized);
         let aspect = view.effective_aspect(natural_aspect);
 
         let displays = self.displays.displays();
@@ -196,6 +211,7 @@ impl OpenService {
             display_id,
             bounds,
             last_fit: bounds,
+            user_sized,
             view,
             natural_aspect,
         });
@@ -211,6 +227,11 @@ impl OpenService {
     pub fn on_bounds_changed(&mut self, id: WindowId, bounds: Rect) {
         let displays = self.displays.displays();
         if let Some(e) = self.windows.iter_mut().find(|e| e.id == id) {
+            if (bounds.w - e.last_fit.w).abs() > SIZE_TOLERANCE
+                || (bounds.h - e.last_fit.h).abs() > SIZE_TOLERANCE
+            {
+                e.user_sized = true;
+            }
             e.bounds = bounds;
             if let Some(d) = display_for_rect(&displays, &bounds) {
                 e.display_id = d.id;
@@ -240,6 +261,33 @@ impl OpenService {
         e.last_fit = refit;
         self.host.set_bounds(id, refit);
         Some(refit)
+    }
+
+    /// The viewer learned the real size of its content (a video's dimensions are only known
+    /// once it is loaded). Updates the aspect and, unless the user already shaped the
+    /// window, refits it around its centre. Returns the new bounds if they changed.
+    pub fn set_natural_size(&mut self, id: WindowId, width: u32, height: u32) -> Option<Rect> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let displays = self.displays.displays();
+        let e = self.windows.iter_mut().find(|e| e.id == id)?;
+        e.natural_aspect = width as f64 / height as f64;
+        let b = e.bounds;
+        let aspect = e.aspect();
+        if e.user_sized || ((b.w as f64 / b.h as f64) - aspect).abs() * (b.h as f64) < 1.5 {
+            return None;
+        }
+        let area = displays
+            .iter()
+            .find(|d| d.id == e.display_id)
+            .map(|d| d.work_area)
+            .unwrap_or(b);
+        let fitted = refit(b, aspect, area);
+        e.bounds = fitted;
+        e.last_fit = fitted;
+        self.host.set_bounds(id, fitted);
+        Some(fitted)
     }
 
     /// After a user resize: snap back to the image aspect, keeping the side the
@@ -277,8 +325,9 @@ impl OpenService {
     }
 
     /// Re-pack every window per display from the anchor. Opening order is the
-    /// fill order. With `keep_sizes` each window keeps its current width and
-    /// height (only positions change); otherwise sizes are recomputed from the
+    /// fill order. With `keep_sizes` only the windows the user touched (resized
+    /// by hand, zoomed or rotated) keep their current width and height; the
+    /// rest follow the size rule. Without it every size is recomputed from the
     /// image aspect and the configured size rule (best of several seeds).
     pub fn relayout_all(&mut self, keep_sizes: bool) {
         let displays = self.displays.displays();
@@ -291,27 +340,35 @@ impl OpenService {
                 continue;
             }
             let strategy = self.config.strategy(d.scale);
-            let rects: Vec<Rect> = if keep_sizes {
-                let mut placed: Vec<Rect> = Vec::with_capacity(idx.len());
-                for &i in &idx {
-                    let b = self.windows[i].bounds;
-                    let r = strategy.place_exact(&placed, d.work_area, b.w, b.h).rect;
-                    placed.push(r);
-                }
-                placed
-            } else {
-                let aspects: Vec<f64> = idx.iter().map(|&i| self.windows[i].aspect()).collect();
-                relayout(&strategy, d.work_area, &aspects, base_seed..base_seed + RELAYOUT_SEEDS, |s| {
-                    Box::new(SplitMix64::new(s))
+            let slots: Vec<Slot> = idx
+                .iter()
+                .map(|&i| {
+                    let e = &self.windows[i];
+                    if keep_sizes && e.is_touched() {
+                        Slot::Exact { w: e.bounds.w, h: e.bounds.h }
+                    } else {
+                        Slot::Rule(e.aspect())
+                    }
                 })
-                .into_iter()
-                .map(|p| p.rect)
-                .collect()
-            };
+                .collect();
+            let rects: Vec<Rect> = relayout_mixed(
+                &strategy,
+                d.work_area,
+                &slots,
+                base_seed..base_seed + RELAYOUT_SEEDS,
+                |s| Box::new(SplitMix64::new(s)),
+            )
+            .into_iter()
+            .map(|p| p.rect)
+            .collect();
             for (&i, rect) in idx.iter().zip(rects) {
-                self.windows[i].bounds = rect;
-                self.windows[i].last_fit = rect;
-                self.host.set_bounds(self.windows[i].id, rect);
+                let e = &mut self.windows[i];
+                if !(keep_sizes && e.is_touched()) {
+                    e.user_sized = false;
+                }
+                e.bounds = rect;
+                e.last_fit = rect;
+                self.host.set_bounds(e.id, rect);
             }
         }
     }
@@ -319,7 +376,7 @@ impl OpenService {
     pub fn snapshot(&self) -> Vec<SavedWindow> {
         self.windows
             .iter()
-            .map(|e| SavedWindow { image: e.image.clone(), bounds: e.bounds, view: e.view })
+            .map(|e| SavedWindow { image: e.image.clone(), bounds: e.bounds, view: e.view, user_sized: e.user_sized })
             .collect()
     }
 
@@ -536,7 +593,12 @@ mod tests {
         svc.open(req("a")).unwrap();
         svc.open(req("b")).unwrap();
         svc.open(req("c")).unwrap();
-        // user reshaped windows by hand (not the grid line, not the image aspect)
+        // user zoomed and reshaped windows by hand (not the grid line, not the image aspect)
+        let mut zoomed = ViewState::default();
+        zoomed.zoom = 2.0;
+        for id in 1..=3 {
+            svc.set_view(id, zoomed);
+        }
         svc.on_bounds_changed(1, Rect::new(500, 500, 420, 180));
         svc.on_bounds_changed(2, Rect::new(900, 100, 250, 640));
         svc.on_bounds_changed(3, Rect::new(10, 700, 333, 333));
@@ -552,6 +614,46 @@ mod tests {
         svc.relayout_all(false);
         let l = log.lock().unwrap();
         assert!(l.bounds.iter().rev().take(3).all(|(_, r)| r.h == 300));
+    }
+
+    #[test]
+    fn keep_sizes_only_pins_windows_the_user_touched() {
+        let (mut svc, log) = service(None, None);
+        svc.open(req("a")).unwrap(); // 300x300 grid cell
+        svc.open(req("b")).unwrap();
+        svc.open(req("c")).unwrap();
+        // a/b only moved or resized by hand; c zoomed. Only c is pinned.
+        svc.on_bounds_changed(1, Rect::new(0, 0, 301, 299));
+        svc.on_bounds_changed(2, Rect::new(900, 100, 250, 640));
+        let mut v = ViewState::default();
+        v.zoom = 2.0;
+        svc.set_view(3, v);
+        svc.on_bounds_changed(3, Rect::new(10, 10, 250, 250));
+        svc.relayout_all(true);
+        let last: Vec<(WindowId, Rect)> = {
+            let l = log.lock().unwrap();
+            l.bounds.iter().rev().take(3).rev().cloned().collect()
+        };
+        assert_eq!((last[0].1.w, last[0].1.h), (300, 300));
+        assert_eq!((last[1].1.w, last[1].1.h), (300, 300)); // hand resize alone: back to the rule
+        assert_eq!((last[2].1.w, last[2].1.h), (250, 250)); // zoomed: kept
+        // reset the view ("원래대로"): no longer pinned
+        svc.set_view(3, ViewState::default());
+        svc.relayout_all(true);
+        let l = log.lock().unwrap();
+        assert!(l.bounds.iter().rev().take(3).all(|(_, r)| r.h == 300));
+    }
+
+    #[test]
+    fn real_content_size_refits_the_window_unless_the_user_shaped_it() {
+        let (mut svc, _log) = service(None, None);
+        svc.open(req("a")).unwrap(); // 300x300 placeholder
+        svc.open(req("b")).unwrap();
+        let b = svc.set_natural_size(1, 1600, 900).expect("refit");
+        assert!(((b.w as f64 / b.h as f64) - 16.0 / 9.0).abs() < 0.02, "{b:?}");
+        assert!(svc.set_natural_size(1, 1600, 900).is_none(), "already fits");
+        svc.on_bounds_changed(2, Rect::new(500, 500, 420, 180));
+        assert!(svc.set_natural_size(2, 1600, 900).is_none(), "user-shaped window is left alone");
     }
 
     #[test]
@@ -644,9 +746,9 @@ mod tests {
     #[test]
     fn restore_keeps_saved_bounds_when_still_on_screen_else_replaces() {
         let (mut svc, log) = service(None, None);
-        let on = Restore { bounds: Rect::new(100, 100, 250, 250), view: ViewState::default() };
+        let on = Restore { bounds: Rect::new(100, 100, 250, 250), view: ViewState::default(), user_sized: false };
         svc.open(OpenRequest { image: url("a"), restore: Some(on) }).unwrap();
-        let off = Restore { bounds: Rect::new(9000, 9000, 250, 250), view: ViewState::default() };
+        let off = Restore { bounds: Rect::new(9000, 9000, 250, 250), view: ViewState::default(), user_sized: false };
         svc.open(OpenRequest { image: url("b"), restore: Some(off) }).unwrap();
         let l = log.lock().unwrap();
         assert_eq!(l.opened[0].bounds, Rect::new(100, 100, 250, 250));

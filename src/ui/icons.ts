@@ -15,6 +15,7 @@ const PATHS = {
   external:
     '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  more: '<circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
   jigsaw:
     '<rect x="4" y="4" width="9" height="7" rx="1.5"/><rect x="15" y="4" width="5" height="12" rx="1.5"/><rect x="4" y="13" width="9" height="7" rx="1.5"/>',

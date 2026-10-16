@@ -1,6 +1,6 @@
 [package]
 name = "pinit-next"
-version = "0.2.2"
+version = "0.3.1"
 description = "PinIt: always-on-top image windows"
 authors = ["PinIt"]
 edition = "2024"
@@ -15,10 +15,24 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 pinit-core = { path = "../crates/pinit-core" }
-tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+# unstable: every webview becomes a child webview whose bounds we can set (see src/anchor.rs)
+tauri = { version = "2", features = ["tray-icon", "protocol-asset", "unstable"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = "3"
+
+# Windows-only: named pipe for the live-video bridge (no network port), see src/pipe.rs,
+# and the mouse-button query in src/anchor.rs.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Pipes",
+  "Win32_UI_Input_KeyboardAndMouse",
+] }

@@ -1,15 +1,18 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Stage } from "./Stage.ts";
 import {
-  defaultView, normalizeAngle, rotateQuarter, zoomAt,
+  defaultView, flipScreen, normalizeAngle, rotateAboutCenter, zoomAt,
 } from "./transform.ts";
 import type { ViewStore } from "./ViewStore.ts";
 
-/** Wheel zoom, Alt+wheel free rotation, Space/middle-drag pan, native window drag. */
+/** Wheel zoom, R+drag free rotation, Space/middle-drag pan, native window drag. */
 export class PointerController {
   private panning = false;
+  private rotating = false;
   private spaceDown = false;
+  private rKeyDown = false;
   private last = { x: 0, y: 0 };
+  private lastAngle = 0;
 
   constructor(private readonly stage: Stage, private readonly store: ViewStore) {
     const el = stage.el;
@@ -26,24 +29,40 @@ export class PointerController {
         this.spaceDown = true;
         el.classList.add("pan-mode");
         e.preventDefault();
+      } else if (e.code === "KeyR" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        this.rKeyDown = true;
+        el.classList.add("rotate-mode");
       }
     });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") {
         this.spaceDown = false;
         el.classList.remove("pan-mode");
+      } else if (e.code === "KeyR") {
+        this.releaseRotate();
       }
     });
+    window.addEventListener("blur", () => {
+      this.spaceDown = false;
+      el.classList.remove("pan-mode");
+      this.releaseRotate();
+    });
+  }
+
+  private releaseRotate(): void {
+    this.rKeyDown = false;
+    this.rotating = false;
+    this.stage.el.classList.remove("rotate-mode");
+  }
+
+  /** Pointer angle (deg, clockwise) around the window centre. */
+  private angleAt(e: PointerEvent): number {
+    const r = this.stage.el.getBoundingClientRect();
+    return (Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180) / Math.PI;
   }
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    if (e.altKey) {
-      const step = e.shiftKey ? 15 : 1;
-      const dir = e.deltaY < 0 ? 1 : -1;
-      this.store.update((v) => ({ ...v, fine_angle_deg: normalizeAngle(v.fine_angle_deg + dir * step) }));
-      return;
-    }
     const factor = Math.exp(-e.deltaY / 400);
     const box = this.stage.windowBox();
     const c = { x: e.offsetX - box.w / 2, y: e.offsetY - box.h / 2 };
@@ -51,6 +70,13 @@ export class PointerController {
   }
 
   private onDown(e: PointerEvent): void {
+    if (this.rKeyDown && e.button === 0) {
+      this.rotating = true;
+      this.lastAngle = this.angleAt(e);
+      this.stage.el.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
     const pan = e.button === 1 || (e.button === 0 && this.spaceDown);
     if (pan) {
       this.panning = true;
@@ -63,6 +89,13 @@ export class PointerController {
   }
 
   private onMove(e: PointerEvent): void {
+    if (this.rotating) {
+      const a = this.angleAt(e);
+      const d = normalizeAngle(a - this.lastAngle);
+      this.lastAngle = a;
+      if (d !== 0) this.store.update((v) => rotateAboutCenter(v, d));
+      return;
+    }
     if (!this.panning) return;
     const dx = e.clientX - this.last.x;
     const dy = e.clientY - this.last.y;
@@ -71,8 +104,9 @@ export class PointerController {
   }
 
   private onUp(e: PointerEvent): void {
-    if (!this.panning) return;
+    if (!this.panning && !this.rotating) return;
     this.panning = false;
+    this.rotating = false;
     this.stage.el.releasePointerCapture(e.pointerId);
   }
 }
@@ -83,17 +117,13 @@ export class KeyboardController {
     window.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       switch (e.key) {
-        case "r":
-        case "R":
-          store.update((v) => rotateQuarter(v, !e.shiftKey));
-          break;
         case "h":
         case "H":
-          store.update((v) => ({ ...v, flip_h: !v.flip_h }));
+          store.update((v) => flipScreen(v, "h"));
           break;
         case "v":
         case "V":
-          store.update((v) => ({ ...v, flip_v: !v.flip_v }));
+          store.update((v) => flipScreen(v, "v"));
           break;
         case "0":
           store.set(defaultView());

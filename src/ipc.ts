@@ -17,12 +17,20 @@ export interface ViewerInit {
   height: number;
   view: ViewState;
   source_url: string | null;
+  /** Live video window: frames arrive as `video-frame` events. */
+  stream: boolean;
+  /** Local video file: played in a <video> element. */
+  video: boolean;
+  /** Physical px the page surface extends beyond the window to the west and north. */
+  margin: number;
+  /** Diagnostics on: log through the host. */
+  trace: boolean;
 }
 
 export type Theme = "system" | "light" | "dark";
 export type ModeKind = "grid" | "jigsaw";
 export type Corner = "topleft" | "topright" | "bottomleft" | "bottomright";
-export type Flow = "rows" | "columns";
+export type Flow = "rows" | "columns" | "diagonal";
 
 export interface Settings {
   theme: Theme;
@@ -59,6 +67,9 @@ export interface UpdateInfo {
 export const ipc = {
   viewerInit: () => invoke<ViewerInit>("viewer_init"),
   viewerSetView: (view: ViewState) => invoke<void>("viewer_set_view", { view }),
+  viewerLog: (msg: string) => invoke<void>("viewer_log", { msg }),
+  viewerPin: (pinned: boolean) => invoke<void>("viewer_pin", { pinned }),
+  viewerVideoSize: (width: number, height: number) => invoke<void>("viewer_video_size", { width, height }),
   viewerFit: () => invoke<void>("viewer_fit"),
   viewerClose: () => invoke<void>("viewer_close"),
   viewerOpenSource: () => invoke<void>("viewer_open_source"),
