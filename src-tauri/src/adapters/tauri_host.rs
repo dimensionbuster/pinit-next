@@ -67,6 +67,8 @@ pub struct ViewerInit {
     pub stream: bool,
     /// Physical px the page surface extends beyond the window to the west and north (see anchor.rs).
     pub margin: i32,
+    /// Diagnostics on (`PINIT_TRACE=1` in a debug build): the page then logs through the host.
+    pub trace: bool,
 }
 
 pub type Registry = Arc<Mutex<HashMap<String, ViewerInit>>>;
@@ -142,6 +144,7 @@ impl WindowHost for TauriHost {
                 source_url,
                 stream: crate::video_bridge::is_stream_still(&spec.image.local_path),
                 margin: crate::anchor::MARGIN,
+                trace: crate::anchor::tracing(),
             },
         );
 

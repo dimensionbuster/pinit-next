@@ -41,10 +41,10 @@ pub async fn viewer_set_view(window: WebviewWindow, view: ViewJson, state: State
     Ok(())
 }
 
-/// Viewer-side diagnostics, printed in the `npm run dev:app` terminal (debug builds only).
+/// Viewer-side diagnostics, printed in the `npm run dev:app` terminal (see `anchor::tracing`).
 #[tauri::command]
 pub fn viewer_log(window: WebviewWindow, msg: String) {
-    if cfg!(debug_assertions) {
+    if crate::anchor::tracing() {
         eprintln!("[js {}] {msg}", window.label());
     }
 }

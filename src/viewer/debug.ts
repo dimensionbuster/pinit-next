@@ -1,8 +1,15 @@
 import { ipc } from "../ipc.ts";
 
-/** Prints in the `npm run dev:app` terminal (via the host). No-op in release builds. */
+let enabled = false;
+
+/** Turn diagnostics on (the host decides: `PINIT_TRACE=1` in a debug build). */
+export function enableDebug(on: boolean): void {
+  enabled = on;
+}
+
+/** Prints in the `npm run dev:app` terminal (via the host) while diagnostics are on. */
 export function dbg(msg: string): void {
-  if (import.meta.env.DEV) void ipc.viewerLog(msg).catch(() => {});
+  if (enabled) void ipc.viewerLog(msg).catch(() => {});
 }
 
 const r = (n: number) => Math.round(n * 10) / 10;

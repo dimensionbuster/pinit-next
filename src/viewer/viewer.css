@@ -2,7 +2,9 @@
 html, body { background: transparent; overflow: hidden; user-select: none; }
 #root { position: fixed; inset: 0; }
 
-.stage { position: absolute; inset: 0; overflow: hidden; cursor: grab; background: transparent; }
+/* Not clipped to the frame: the window itself clips (natively, with no lag), so a strip the window
+   has just uncovered already shows picture and backdrop before the page learns the new frame. */
+.stage { position: absolute; inset: 0; cursor: grab; }
 .stage.pan-mode { cursor: move; }
 /* R held (Photoshop-style): drag to rotate about the window centre */
 .stage.rotate-mode {

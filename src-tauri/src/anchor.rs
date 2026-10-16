@@ -35,9 +35,15 @@ const MAX_SURFACE: i32 = 16384;
 /// How long after the last geometry change a finished drag trims the webview.
 const TRIM_DELAY: Duration = Duration::from_millis(250);
 
-/// Diagnostics for `npm run dev:app` (debug builds only; silent in release).
+/// Diagnostics are on only in debug builds started with `PINIT_TRACE=1` (the printing itself
+/// would slow a drag down), e.g. `$env:PINIT_TRACE=1; npm run dev:app`.
+pub fn tracing() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| cfg!(debug_assertions) && std::env::var_os("PINIT_TRACE").is_some())
+}
+
 macro_rules! trace {
-    ($($t:tt)*) => { if cfg!(debug_assertions) { eprintln!("[anchor] {}", format!($($t)*)); } };
+    ($($t:tt)*) => { if tracing() { eprintln!("[anchor] {}", format!($($t)*)); } };
 }
 
 /// A screen rectangle in physical px.

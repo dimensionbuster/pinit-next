@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "../design.css";
 import "./viewer.css";
 import { ipc, type Settings } from "../ipc.ts";
-import { dbg } from "./debug.ts";
+import { dbg, enableDebug } from "./debug.ts";
 import { h } from "../ui/dom.ts";
 import { KeyboardController, PointerController } from "./controllers.ts";
 import { ResizeAnchor } from "./ResizeAnchor.ts";
@@ -16,6 +16,7 @@ import { ViewStore } from "./ViewStore.ts";
 
 async function main(): Promise<void> {
   const init = await ipc.viewerInit();
+  enableDebug(init.trace);
   const store = new ViewStore(init.view, (v) => void ipc.viewerSetView(v));
   const stage = new Stage(convertFileSrc(init.path), store);
 

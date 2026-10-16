@@ -21,6 +21,8 @@ export interface ViewerInit {
   stream: boolean;
   /** Physical px the page surface extends beyond the window to the west and north. */
   margin: number;
+  /** Diagnostics on: log through the host. */
+  trace: boolean;
 }
 
 export type Theme = "system" | "light" | "dark";

@@ -27,9 +27,12 @@ export class Stage {
     this.render();
   }
 
-  /** Paint the area behind/around the image (visible when panned, zoomed out or letterboxed). */
+  /**
+   * Paint the area behind/around the image (visible when panned, zoomed out or letterboxed). It is
+   * the page background, not the stage's, so it covers the whole surface the window clips.
+   */
   setBackdrop(css: string): void {
-    this.el.style.background = css;
+    document.body.style.background = css;
   }
 
   /**
