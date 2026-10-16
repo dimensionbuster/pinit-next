@@ -11,7 +11,8 @@
 //! path; that still is never persisted into the session.
 
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+use std::collections::HashMap;
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -33,6 +34,21 @@ pub const MAX_LINE: u64 = 12 * 1024 * 1024;
 const MAX_HELLO: u64 = 4 * 1024;
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 const WATCH_INTERVAL: Duration = Duration::from_millis(200);
+
+/// Live streams: stream id -> label of its window (None until the first frame opened it).
+/// The control connection (below) uses it to find the window whose size it reports.
+static STREAMS: Mutex<Option<HashMap<String, Option<String>>>> = Mutex::new(None);
+
+fn with_streams<T>(f: impl FnOnce(&mut HashMap<String, Option<String>>) -> T) -> T {
+    let mut guard = STREAMS.lock().unwrap_or_else(|e| e.into_inner());
+    f(guard.get_or_insert_with(HashMap::new))
+}
+
+/// First line of the host's second ("control") connection: asks for window size hints.
+pub fn ctl_hello_line(sid: &str) -> String {
+    format!("{}
+", json!({ "sid": sid, "ctl": true }))
+}
 
 /// The staged first frame of a stream (also used to keep it out of saved sessions).
 pub fn is_stream_still(path: &Path) -> bool {
@@ -143,6 +159,7 @@ fn serve(app: &AppHandle, inbox: &Path, pipe: File) -> io::Result<()> {
         let _ = w.close();
     }
     if let Some(sid) = st.sid.lock().unwrap().as_deref() {
+        with_streams(|m| m.remove(sid));
         let _ = std::fs::remove_file(inbox.join(format!("{STILL_PREFIX}{sid}.jpg")));
     }
     // dropping `pipe` tells the host (it polls for a closed pipe) to stop the capture
@@ -162,8 +179,12 @@ fn read_stream(app: &AppHandle, inbox: &Path, pipe: &File, st: &Stream) -> io::R
         .filter(|s| valid_sid(s))
         .ok_or_else(|| io::Error::other("bad sid"))?
         .to_string();
-    *st.sid.lock().unwrap() = Some(sid.clone());
     st.hello_done.store(true, Ordering::SeqCst);
+    if hello.get("ctl").and_then(Value::as_bool) == Some(true) {
+        return send_size_hints(app, pipe, &sid);
+    }
+    *st.sid.lock().unwrap() = Some(sid.clone());
+    with_streams(|m| m.insert(sid.clone(), None));
 
     let still = inbox.join(format!("{STILL_PREFIX}{sid}.jpg"));
     loop {
@@ -187,11 +208,37 @@ fn read_stream(app: &AppHandle, inbox: &Path, pipe: &File, st: &Stream) -> io::R
                     }
                     None => {
                         let l = open_window(app, inbox, &still, b64_data).map_err(io::Error::other)?;
+                        with_streams(|m| m.insert(sid.clone(), Some(l.clone())));
                         *st.label.lock().unwrap() = Some(l);
                     }
                 }
             }
             _ => {}
+        }
+    }
+}
+
+/// Control connection: the host reads, we only write. Reports the window's pixel size
+/// whenever it changes so the browser can capture at the size that is actually shown.
+fn send_size_hints(app: &AppHandle, pipe: &File, sid: &str) -> io::Result<()> {
+    let mut out = pipe;
+    let mut last = (0u32, 0u32);
+    let started = Instant::now();
+    loop {
+        std::thread::sleep(WATCH_INTERVAL);
+        match with_streams(|m| m.get(sid).cloned()) {
+            None => return Ok(()), // stream ended
+            Some(None) if started.elapsed() > Duration::from_secs(60) => return Ok(()),
+            Some(None) => continue, // window not open yet
+            Some(Some(label)) => {
+                let Some(win) = app.get_webview_window(&label) else { return Ok(()) };
+                let Ok(size) = win.inner_size() else { continue };
+                if (size.width, size.height) != last && size.width > 0 && size.height > 0 {
+                    last = (size.width, size.height);
+                    out.write_all(format!("{}
+", json!({ "w": size.width, "h": size.height })).as_bytes())?;
+                }
+            }
         }
     }
 }

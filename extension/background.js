@@ -117,6 +117,10 @@ function onNativeMessage(sid, m) {
         fail("영상을 캡처할 수 없습니다 (" + e.message + ")");
         endStream(sid);
       });
+  } else if (m.type === "size") {
+    // the window's pixel size: capture no larger than what is shown
+    s.size = { w: m.w, h: m.h };
+    if (s.framePort) s.framePort.postMessage({ size: s.size });
   } else if (m.type === "stop") {
     endStream(sid);
   }
@@ -144,10 +148,13 @@ chrome.runtime.onConnect.addListener((port) => {
   const s = streams.get(sid);
   if (!s) return port.disconnect();
   s.framePort = port;
+  if (s.size) port.postMessage({ size: s.size });
   port.onMessage.addListener((m) => {
     if (m.type === "video-error") {
       fail(m.error || "영상을 캡처할 수 없습니다");
       endStream(sid);
+    } else if (m.type === "video-stat") {
+      chrome.action.setTitle({ title: "PinIt — 스트리밍 " + m.fps + " fps" });
     } else {
       s.native.postMessage({ v: 1, sid, type: m.type, w: m.w, h: m.h, jpeg_b64: m.jpeg_b64 });
     }
@@ -177,16 +184,24 @@ function pinitVideo(sid, start) {
   if (!best) return null;
   if (!start) return { area: bestScore };
 
-  const MAX_W = 1280;
-  const FPS = 24;
-  const QUALITY = 0.72;
+  const MAX_W = 1920; // until the app reports the window size
+  const FPS = 60;
+  const QUALITY = 0.85;
+  const MAX_INFLIGHT = 2; // frames being encoded/serialised at once (pipelining)
   const video = best;
   const port = chrome.runtime.connect({ name: "pinit-video:" + sid });
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+  // Two canvases so the next frame can be drawn while the previous one is still encoding.
+  const canvases = [document.createElement("canvas"), document.createElement("canvas")];
+  const ctxs = canvases.map((c) => c.getContext("2d"));
   let stopped = false;
-  let busy = false;
+  let inflight = 0;
+  let slot = 0;
+  let seq = 0; // frames are numbered; a result older than the last one sent is dropped
+  let sentSeq = 0;
   let last = 0;
+  let sentTime = -1;
+  let statFrames = 0;
+  let statAt = performance.now();
   const stop = () => {
     if (stopped) return;
     stopped = true;
@@ -194,8 +209,20 @@ function pinitVideo(sid, start) {
       port.disconnect();
     } catch (_) {}
   };
-  port.onMessage.addListener((m) => m && m.stop && stop());
+  let shown = null; // window pixel size reported by the app: never capture more than that
+  port.onMessage.addListener((m) => {
+    if (m && m.stop) stop();
+    else if (m && m.size) shown = m.size;
+  });
   port.onDisconnect.addListener(() => (stopped = true));
+
+  const toBase64 = (blob) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1]);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
 
   const step = () => {
     if (stopped) return;
@@ -205,42 +232,58 @@ function pinitVideo(sid, start) {
       return;
     }
     const now = performance.now();
-    if (!busy && !video.paused && video.readyState >= 2 && video.videoWidth && now - last >= 1000 / FPS) {
+    // A paused video still gets its current frame shown (once, and again after a seek).
+    const fresh = !video.paused || sentTime !== video.currentTime;
+    if (inflight < MAX_INFLIGHT && fresh && video.readyState >= 2 && video.videoWidth && now - last >= 1000 / FPS - 2) {
       last = now;
-      busy = true;
-      const scale = Math.min(1, MAX_W / video.videoWidth);
+      sentTime = video.currentTime;
+      // native resolution is the ceiling; the shown window size is the target (never below 320px wide)
+      const want = shown ? Math.max(shown.w / video.videoWidth, shown.h / video.videoHeight) : MAX_W / video.videoWidth;
+      const scale = Math.min(1, Math.max(want, 320 / video.videoWidth));
       const w = Math.round(video.videoWidth * scale);
       const h = Math.round(video.videoHeight * scale);
+      const canvas = canvases[slot];
+      const ctx = ctxs[slot];
+      slot ^= 1;
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
       }
       try {
         ctx.drawImage(video, 0, 0, w, h);
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              busy = false;
-              return;
-            }
-            const reader = new FileReader();
-            reader.onload = () => {
-              busy = false;
-              if (!stopped) port.postMessage({ type: "video-frame", w, h, jpeg_b64: String(reader.result).split(",")[1] });
-            };
-            reader.onerror = () => (busy = false);
-            reader.readAsDataURL(blob);
-          },
-          "image/jpeg",
-          QUALITY,
-        );
       } catch (e) {
         port.postMessage({ type: "video-error", error: "이 영상은 캡처할 수 없습니다 (" + e.name + ")" });
         stop();
         return;
       }
+      const mine = ++seq;
+      inflight++;
+      new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", QUALITY))
+        .then((blob) => (blob ? toBase64(blob) : null))
+        .then((b64) => {
+          if (!b64 || stopped || mine < sentSeq) return;
+          sentSeq = mine;
+          port.postMessage({ type: "video-frame", w, h, jpeg_b64: b64 });
+          statFrames++;
+        })
+        .catch((e) => {
+          // e.g. SecurityError: the page's video taints the canvas (cross-origin, DRM)
+          if (stopped) return;
+          port.postMessage({ type: "video-error", error: "이 영상은 캡처할 수 없습니다 (" + ((e && e.name) || e) + ")" });
+          stop();
+        })
+        .finally(() => inflight--);
     }
-    if (typeof video.requestVideoFrameCallback === "function") video.requestVideoFrameCallback(step);
+    if (now - statAt >= 2000) {
+      // shown as the toolbar tooltip so the real frame rate can be read off
+      port.postMessage({ type: "video-stat", fps: Math.round((statFrames * 1000) / (now - statAt)) });
+      statFrames = 0;
+      statAt = now;
+    }
+    // requestVideoFrameCallback never fires while paused: poll instead so a pause is noticed
+    // (frames, seeks, resume, window close).
+    if (video.paused) setTimeout(step, 150);
+    else if (typeof video.requestVideoFrameCallback === "function") video.requestVideoFrameCallback(step);
     else requestAnimationFrame(step);
   };
   step();

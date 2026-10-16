@@ -6,7 +6,7 @@
 //! when PinIt closes the pipe (its window was closed).
 
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 
 use crate::native_host::{read_frame, write_frame, HostEnv, RealEnv};
 use crate::pipe;
-use crate::video_bridge::{hello_line, valid_sid, MAX_LINE};
+use crate::video_bridge::{ctl_hello_line, hello_line, valid_sid, MAX_LINE};
 
 const START_TIMEOUT: Duration = Duration::from_secs(15);
 const WATCH_INTERVAL: Duration = Duration::from_millis(300);
@@ -78,6 +78,27 @@ pub fn run(first: &Value) -> i32 {
             send(&json!({ "v": 1, "type": "stop", "sid": sid }));
             std::process::exit(0);
         });
+    }
+
+    // App -> Chrome: window size hints on a second connection (a synchronous pipe handle
+    // cannot be read while the first one is being written). Optional: without it the
+    // extension just captures at its default size.
+    if let Ok(ctl) = pipe::connect() {
+        let sid = sid.clone();
+        if (&ctl).write_all(ctl_hello_line(&sid).as_bytes()).is_ok() {
+            std::thread::spawn(move || {
+                let mut lines = BufReader::new(ctl);
+                let mut line = String::new();
+                while lines.read_line(&mut line).is_ok_and(|n| n > 0) {
+                    if let Ok(v) = serde_json::from_str::<Value>(line.trim()) {
+                        if let (Some(w), Some(h)) = (v.get("w").and_then(Value::as_u64), v.get("h").and_then(Value::as_u64)) {
+                            send(&json!({ "v": 1, "type": "size", "sid": sid, "w": w, "h": h }));
+                        }
+                    }
+                    line.clear();
+                }
+            });
+        }
     }
 
     // Chrome -> app.
