@@ -207,6 +207,7 @@ pub fn run() {
             commands::save_all,
             commands::open_url_text,
             commands::open_dropped,
+            commands::viewer_video_size,
             commands::export_layout,
             commands::import_layout,
             commands::reveal_extension,

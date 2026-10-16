@@ -108,7 +108,11 @@ impl Settings {
             "bottomright" => Corner::BottomRight,
             _ => Corner::TopRight,
         };
-        let flow = if self.flow == "columns" { Flow::Columns } else { Flow::Rows };
+        let flow = match self.flow.as_str() {
+            "columns" => Flow::Columns,
+            "diagonal" => Flow::Diagonal,
+            _ => Flow::Rows,
+        };
         let mode = match self.mode {
             ModeKind::Grid => LayoutMode::Grid { line: self.grid_line.clamp(80, 1600) },
             ModeKind::Jigsaw => {

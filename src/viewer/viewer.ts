@@ -26,6 +26,13 @@ async function main(): Promise<void> {
     await getCurrentWebviewWindow().listen<string>("video-frame", (e) => stage.pushFrame(e.payload));
   }
 
+  if (init.video) {
+    stage.enableVideo(convertFileSrc(init.path), (w, h) => void ipc.viewerVideoSize(w, h));
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "KeyP" && !e.ctrlKey && !e.metaKey && !e.altKey) stage.togglePlay();
+    });
+  }
+
   new PointerController(stage, store);
   new KeyboardController(store);
 

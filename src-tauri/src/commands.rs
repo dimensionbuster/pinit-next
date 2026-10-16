@@ -55,6 +55,15 @@ pub fn viewer_pin(window: WebviewWindow, pinned: bool) {
     crate::anchor::set_pinned(&window, pinned);
 }
 
+/// The viewer loaded a video and knows its real size: refit the window to that aspect.
+#[tauri::command]
+pub async fn viewer_video_size(window: WebviewWindow, width: u32, height: u32, state: State<'_, AppState>) -> Res<()> {
+    let id = id_from_label(window.label()).ok_or("not a viewer window")?;
+    state.service.lock().unwrap().set_natural_size(id, width, height);
+    state.send(Msg::Dirty);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn viewer_fit(window: WebviewWindow, state: State<'_, AppState>) -> Res<()> {
     let id = id_from_label(window.label()).ok_or("not a viewer window")?;

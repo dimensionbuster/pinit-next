@@ -29,6 +29,8 @@ pub enum Flow {
     Rows,
     /// Fill along a vertical line, then start the next line beside it.
     Columns,
+    /// Fill along anti-diagonals radiating from the anchor corner.
+    Diagonal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,7 +40,7 @@ pub struct Anchor {
 }
 
 impl Anchor {
-    pub const ALL: [Anchor; 8] = [
+    pub const ALL: [Anchor; 12] = [
         Anchor { corner: Corner::TopLeft, flow: Flow::Rows },
         Anchor { corner: Corner::TopRight, flow: Flow::Rows },
         Anchor { corner: Corner::BottomLeft, flow: Flow::Rows },
@@ -47,6 +49,10 @@ impl Anchor {
         Anchor { corner: Corner::TopRight, flow: Flow::Columns },
         Anchor { corner: Corner::BottomLeft, flow: Flow::Columns },
         Anchor { corner: Corner::BottomRight, flow: Flow::Columns },
+        Anchor { corner: Corner::TopLeft, flow: Flow::Diagonal },
+        Anchor { corner: Corner::TopRight, flow: Flow::Diagonal },
+        Anchor { corner: Corner::BottomLeft, flow: Flow::Diagonal },
+        Anchor { corner: Corner::BottomRight, flow: Flow::Diagonal },
     ];
 }
 
@@ -101,6 +107,8 @@ struct Frame {
     flip_x: bool,
     flip_y: bool,
     transpose: bool,
+    /// Scan candidates by distance from the corner (x + y) instead of row by row.
+    diagonal: bool,
 }
 
 impl Frame {
@@ -111,7 +119,13 @@ impl Frame {
             Corner::BottomLeft => (false, true),
             Corner::BottomRight => (true, true),
         };
-        Self { area, flip_x, flip_y, transpose: anchor.flow == Flow::Columns }
+        Self {
+            area,
+            flip_x,
+            flip_y,
+            transpose: anchor.flow == Flow::Columns,
+            diagonal: anchor.flow == Flow::Diagonal,
+        }
     }
 
     fn canon_area(&self) -> Rect {
@@ -246,11 +260,15 @@ fn scan(
     ys.sort_unstable();
     ys.dedup();
 
-    for &y in &ys {
-        for &x in &xs {
-            if let Some(r) = fit_at(area, obstacles, x, y, tw, th, min_h, aspect) {
-                return Placement { rect: frame.to_real(&r), overflowed: false };
-            }
+    // Row order: nearest row first. Diagonal order: nearest anti-diagonal first
+    // (x + y), so the fill grows outward from the corner as a growing triangle.
+    let mut cands: Vec<(i32, i32)> = ys.iter().flat_map(|&y| xs.iter().map(move |&x| (x, y))).collect();
+    if frame.diagonal {
+        cands.sort_by_key(|&(x, y)| (x + y, y));
+    }
+    for (x, y) in cands {
+        if let Some(r) = fit_at(area, obstacles, x, y, tw, th, min_h, aspect) {
+            return Placement { rect: frame.to_real(&r), overflowed: false };
         }
     }
 
@@ -489,6 +507,21 @@ mod tests {
         assert!(placed.iter().all(|p| p.rect.h == 300));
         assert_eq!(placed[1].rect.x, placed[0].rect.right());
         assert_eq!(placed[1].rect.y, placed[0].rect.y);
+    }
+
+    #[test]
+    fn diagonal_flow_grows_outward_from_the_corner() {
+        let s = FrontierPlacement::new(
+            Anchor { corner: Corner::TopLeft, flow: Flow::Diagonal },
+            SizeRule::Grid { line: 300 },
+        );
+        let placed = fill(&s, AREA, &[1.0; 6], 0);
+        let mut origins: Vec<(i32, i32)> = placed.iter().map(|p| (p.rect.x, p.rect.y - AREA.y)).collect();
+        // first diagonal: corner; second: its two neighbours; third: three cells
+        assert_eq!(origins[0], (0, 0));
+        origins[1..3].sort();
+        assert_eq!(&origins[1..3], &[(0, 300), (300, 0)]);
+        assert!(origins[3..].iter().all(|&(x, y)| x + y == 600), "{origins:?}");
     }
 
     #[test]

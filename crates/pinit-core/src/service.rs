@@ -107,10 +107,10 @@ impl Entry {
         self.view.effective_aspect(self.natural_aspect)
     }
 
-    /// Hand-resized, zoomed or rotated: "keep current size" leaves it alone.
+    /// Zoomed or rotated: "keep current size" leaves it alone. Moving or resizing
+    /// the window alone, or resetting the view, does not count.
     fn is_touched(&self) -> bool {
-        self.user_sized
-            || (self.view.zoom - 1.0).abs() > 1e-6
+        (self.view.zoom - 1.0).abs() > 1e-6
             || self.view.quarter_turns != 0
             || self.view.fine_angle_deg.abs() > 1e-6
     }
@@ -261,6 +261,33 @@ impl OpenService {
         e.last_fit = refit;
         self.host.set_bounds(id, refit);
         Some(refit)
+    }
+
+    /// The viewer learned the real size of its content (a video's dimensions are only known
+    /// once it is loaded). Updates the aspect and, unless the user already shaped the
+    /// window, refits it around its centre. Returns the new bounds if they changed.
+    pub fn set_natural_size(&mut self, id: WindowId, width: u32, height: u32) -> Option<Rect> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let displays = self.displays.displays();
+        let e = self.windows.iter_mut().find(|e| e.id == id)?;
+        e.natural_aspect = width as f64 / height as f64;
+        let b = e.bounds;
+        let aspect = e.aspect();
+        if e.user_sized || ((b.w as f64 / b.h as f64) - aspect).abs() * (b.h as f64) < 1.5 {
+            return None;
+        }
+        let area = displays
+            .iter()
+            .find(|d| d.id == e.display_id)
+            .map(|d| d.work_area)
+            .unwrap_or(b);
+        let fitted = refit(b, aspect, area);
+        e.bounds = fitted;
+        e.last_fit = fitted;
+        self.host.set_bounds(id, fitted);
+        Some(fitted)
     }
 
     /// After a user resize: snap back to the image aspect, keeping the side the
@@ -566,7 +593,12 @@ mod tests {
         svc.open(req("a")).unwrap();
         svc.open(req("b")).unwrap();
         svc.open(req("c")).unwrap();
-        // user reshaped windows by hand (not the grid line, not the image aspect)
+        // user zoomed and reshaped windows by hand (not the grid line, not the image aspect)
+        let mut zoomed = ViewState::default();
+        zoomed.zoom = 2.0;
+        for id in 1..=3 {
+            svc.set_view(id, zoomed);
+        }
         svc.on_bounds_changed(1, Rect::new(500, 500, 420, 180));
         svc.on_bounds_changed(2, Rect::new(900, 100, 250, 640));
         svc.on_bounds_changed(3, Rect::new(10, 700, 333, 333));
@@ -590,18 +622,38 @@ mod tests {
         svc.open(req("a")).unwrap(); // 300x300 grid cell
         svc.open(req("b")).unwrap();
         svc.open(req("c")).unwrap();
-        // b resized by hand; c zoomed; a untouched. The host echoing our own size is not a user resize.
+        // a/b only moved or resized by hand; c zoomed. Only c is pinned.
         svc.on_bounds_changed(1, Rect::new(0, 0, 301, 299));
         svc.on_bounds_changed(2, Rect::new(900, 100, 250, 640));
         let mut v = ViewState::default();
         v.zoom = 2.0;
         svc.set_view(3, v);
+        svc.on_bounds_changed(3, Rect::new(10, 10, 250, 250));
+        svc.relayout_all(true);
+        let last: Vec<(WindowId, Rect)> = {
+            let l = log.lock().unwrap();
+            l.bounds.iter().rev().take(3).rev().cloned().collect()
+        };
+        assert_eq!((last[0].1.w, last[0].1.h), (300, 300));
+        assert_eq!((last[1].1.w, last[1].1.h), (300, 300)); // hand resize alone: back to the rule
+        assert_eq!((last[2].1.w, last[2].1.h), (250, 250)); // zoomed: kept
+        // reset the view ("원래대로"): no longer pinned
+        svc.set_view(3, ViewState::default());
         svc.relayout_all(true);
         let l = log.lock().unwrap();
-        let last: Vec<(WindowId, Rect)> = l.bounds.iter().rev().take(3).rev().cloned().collect();
-        assert_eq!(last[0], (1, Rect::new(0, 0, 300, 300)));
-        assert_eq!(last[1], (2, Rect::new(300, 0, 250, 640)));
-        assert_eq!((last[2].1.w, last[2].1.h), (300, 300));
+        assert!(l.bounds.iter().rev().take(3).all(|(_, r)| r.h == 300));
+    }
+
+    #[test]
+    fn real_content_size_refits_the_window_unless_the_user_shaped_it() {
+        let (mut svc, _log) = service(None, None);
+        svc.open(req("a")).unwrap(); // 300x300 placeholder
+        svc.open(req("b")).unwrap();
+        let b = svc.set_natural_size(1, 1600, 900).expect("refit");
+        assert!(((b.w as f64 / b.h as f64) - 16.0 / 9.0).abs() < 0.02, "{b:?}");
+        assert!(svc.set_natural_size(1, 1600, 900).is_none(), "already fits");
+        svc.on_bounds_changed(2, Rect::new(500, 500, 420, 180));
+        assert!(svc.set_natural_size(2, 1600, 900).is_none(), "user-shaped window is left alone");
     }
 
     #[test]

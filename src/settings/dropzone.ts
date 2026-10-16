@@ -64,6 +64,8 @@ async function handleDrop(dt: DataTransfer): Promise<void> {
       for (const f of files) await ipc.openDropped(await readBase64(f), f.type || "image/png");
     } else if (url) {
       await ipc.openUrlText(url);
+    } else if ([...dt.files].some((f) => f.type.startsWith("video/"))) {
+      toast("영상은 탐색기에서 파일을 우클릭 → 'PinIt에 고정'으로 열어 주세요");
     } else {
       toast("이미지를 찾지 못했어요");
     }

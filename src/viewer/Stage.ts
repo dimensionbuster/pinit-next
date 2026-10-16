@@ -7,9 +7,10 @@ export class Stage {
   readonly el: HTMLDivElement;
   private readonly img: HTMLImageElement;
   private readonly status: HTMLDivElement;
-  /** What is painted: the image, or the canvas of a live video. */
-  private surface: HTMLImageElement | HTMLCanvasElement;
+  /** What is painted: the image, the canvas of a live video, or a local video. */
+  private surface: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement;
   private canvas: HTMLCanvasElement | null = null;
+  private video: HTMLVideoElement | null = null;
   private decoding = false;
   private pending: string | null = null;
 
@@ -19,7 +20,9 @@ export class Stage {
     this.el = h("div", { class: "stage" }, this.img, this.status);
     this.surface = this.img;
 
-    this.img.addEventListener("error", () => this.showStatus("이미지를 불러올 수 없습니다"));
+    this.img.addEventListener("error", () => {
+      if (!this.video && !this.canvas) this.showStatus("이미지를 불러올 수 없습니다");
+    });
     this.img.src = src;
 
     new ResizeObserver(() => this.render()).observe(this.el);
@@ -45,6 +48,37 @@ export class Stage {
     this.surface = canvas;
     this.img.hidden = true;
     this.el.insertBefore(canvas, this.status);
+  }
+
+  /**
+   * Local video file: a `<video>` takes the image's place and plays natively (full quality,
+   * sound). `onSize` gets the real dimensions once the metadata is known.
+   */
+  enableVideo(src: string, onSize: (w: number, h: number) => void): void {
+    const video = h("video", { class: "image", loop: true, playsInline: true });
+    video.src = src;
+    this.video = video;
+    this.surface = video;
+    this.img.removeAttribute("src"); // the file is a video: the <img> must not try to load it
+    this.img.hidden = true;
+    this.el.insertBefore(video, this.status);
+    video.addEventListener("loadedmetadata", () => {
+      onSize(video.videoWidth, video.videoHeight);
+      this.render();
+    });
+    video.addEventListener("error", () => this.showStatus("이 영상은 재생할 수 없습니다 (코덱 미지원일 수 있어요)"));
+    // sound on if the webview allows autoplay with audio; otherwise start muted
+    video.play().catch(() => {
+      video.muted = true;
+      void video.play().catch(() => {});
+    });
+  }
+
+  togglePlay(): void {
+    const v = this.video;
+    if (!v) return;
+    if (v.paused) void v.play().catch(() => {});
+    else v.pause();
   }
 
   pushFrame(b64: string): void {
@@ -88,9 +122,11 @@ export class Stage {
 
   /** Fit scale (unzoomed image vs window); 0 until the image has loaded. */
   fitScale(win: Box = this.windowBox()): number {
-    const natural = this.canvas
-      ? { w: this.canvas.width, h: this.canvas.height }
-      : { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    const natural = this.video
+      ? { w: this.video.videoWidth, h: this.video.videoHeight }
+      : this.canvas
+        ? { w: this.canvas.width, h: this.canvas.height }
+        : { w: this.img.naturalWidth, h: this.img.naturalHeight };
     return fitScale(win, this.store.get().quarter_turns, natural);
   }
 

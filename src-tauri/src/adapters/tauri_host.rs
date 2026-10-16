@@ -65,6 +65,8 @@ pub struct ViewerInit {
     pub source_url: Option<String>,
     /// Live video: frames arrive as `video-frame` events instead of a static file.
     pub stream: bool,
+    /// A local video file the page plays itself in a `<video>`.
+    pub video: bool,
     /// Physical px the page surface extends beyond the window to the west and north (see anchor.rs).
     pub margin: i32,
     /// Diagnostics on (`PINIT_TRACE=1` in a debug build): the page then logs through the host.
@@ -143,6 +145,7 @@ impl WindowHost for TauriHost {
                 view: spec.view.into(),
                 source_url,
                 stream: crate::video_bridge::is_stream_still(&spec.image.local_path),
+                video: crate::cli::is_video_path(&spec.image.local_path),
                 margin: crate::anchor::MARGIN,
                 trace: crate::anchor::tracing(),
             },

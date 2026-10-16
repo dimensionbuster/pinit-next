@@ -10,8 +10,11 @@ use std::path::Path;
 const VERB: &str = if cfg!(debug_assertions) { "PinItDev" } else { "PinIt" };
 const LABEL: &str = if cfg!(debug_assertions) { "PinIt DEV에 고정" } else { "PinIt에 고정" };
 
-fn verb_key() -> String {
-    format!(r"HKCU\Software\Classes\SystemFileAssociations\image\shell\{VERB}")
+/// Registry class under `SystemFileAssociations`: "image", or one extension (".mp4").
+/// Videos are registered per extension: the generic "video" class is not honoured for
+/// every file type/default player.
+fn verb_key(class: &str) -> String {
+    format!(r"HKCU\Software\Classes\SystemFileAssociations\{class}\shell\{VERB}")
 }
 
 pub fn command_line(exe: &Path) -> String {
@@ -22,16 +25,20 @@ pub fn command_line(exe: &Path) -> String {
 pub fn register(exe: &Path) {
     #[cfg(windows)]
     {
-        let key = verb_key();
         let icon = format!("{},0", exe.display());
         let command = command_line(exe);
-        let entries: [(String, Option<&str>, String); 3] = [
-            (key.clone(), None, LABEL.to_string()),
-            (key.clone(), Some("Icon"), icon),
-            (format!(r"{key}\command"), None, command),
-        ];
-        for (k, name, data) in entries {
-            reg_add(&k, name, &data);
+        let classes = std::iter::once("image".to_string())
+            .chain(crate::cli::VIDEO_EXTS.iter().map(|e| format!(".{e}")));
+        for class in classes {
+            let key = verb_key(&class);
+            let entries: [(String, Option<&str>, String); 3] = [
+                (key.clone(), None, LABEL.to_string()),
+                (key.clone(), Some("Icon"), icon.clone()),
+                (format!(r"{key}\command"), None, command.clone()),
+            ];
+            for (k, name, data) in entries {
+                reg_add(&k, name, &data);
+            }
         }
     }
     #[cfg(not(windows))]

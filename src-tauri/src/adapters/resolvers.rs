@@ -73,6 +73,12 @@ pub struct FileResolver;
 impl ImageResolver for FileResolver {
     fn resolve(&self, image: &ImageRef) -> Result<ResolvedImage, ResolveError> {
         let ImageRef::File(path) = image else { return Err(ResolveError::Unsupported) };
+        if crate::cli::is_video_path(path) {
+            // The real size is only known once the viewer has loaded the video: it reports it
+            // back (`viewer_video_size`) and the window is refitted. Until then, 16:9.
+            fs::metadata(path).map_err(|e| fail(format!("{}: {e}", path.display())))?;
+            return Ok(ResolvedImage { image: image.clone(), local_path: path.clone(), width: 1280, height: 720 });
+        }
         let header = read_header(path)?;
         resolved(image, path.clone(), &header)
     }
