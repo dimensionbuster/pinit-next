@@ -291,18 +291,21 @@ function pinitVideo(sid, start) {
     // requestVideoFrameCallback never fires while paused: poll instead so a pause is noticed
     // (frames, seeks, resume, window close).
     // Chrome stops rVFC/rAF while the window is fully covered by another window (native
-    // occlusion). The worker ticker below takes over then (see `tick`); whichever fires first
-    // runs the next step, the other is ignored (generation counter).
-    const gen = ++scheduled;
-    const next = () => {
-      if (gen === scheduled) step();
-    };
-    if (!video.paused) {
+    // occlusion). The worker ticker below takes over then (see `tick`); steps are rate-limited
+    // by `last`, so both triggers running is harmless.
+    // At most one callback is pending: while occluded it never fires, and the ticker would
+    // otherwise pile up a new one on every step.
+    if (!video.paused && !waiting) {
+      waiting = true;
+      const next = () => {
+        waiting = false;
+        step();
+      };
       if (typeof video.requestVideoFrameCallback === "function") video.requestVideoFrameCallback(next);
       else requestAnimationFrame(next);
     }
   };
-  let scheduled = 0;
+  let waiting = false;
 
   // Page timers of a hidden/occluded page get throttled harder the longer it stays hidden
   // (1/s, then once a minute), so the frame rate decays. A Worker's timers are not throttled:
