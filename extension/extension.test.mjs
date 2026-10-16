@@ -33,7 +33,14 @@ test("host names in Rust match the extension scripts", () => {
 
 test("extension keeps minimal permissions", () => {
   // activeTab + scripting: only after a click, only to capture the playing <video> (no host access)
-  assert.deepEqual([...manifest.permissions].sort(), ["activeTab", "contextMenus", "nativeMessaging", "scripting"]);
+  assert.deepEqual([...manifest.permissions].sort(), [
+    "activeTab",
+    "contextMenus",
+    "nativeMessaging",
+    "offscreen",
+    "scripting",
+    "tabCapture",
+  ]); // tabCapture + offscreen: video-only capture held open so a covered tab keeps rendering
   assert.equal(manifest.host_permissions, undefined);
   assert.equal(manifest.content_scripts, undefined);
 });
