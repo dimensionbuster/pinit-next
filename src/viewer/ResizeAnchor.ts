@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ipc } from "../ipc.ts";
 import { dbg, fmtRect } from "./debug.ts";
 import type { ViewState } from "../ipc.ts";
@@ -40,7 +40,8 @@ export class ResizeAnchor {
     const m = marginPx / window.devicePixelRatio;
     root.style.inset = `${m}px 0 0 ${m}px`;
     this.frame = { x: m, y: m, ...stage.windowBox() };
-    void listen<FrameEvent>("win-frame", (e) => this.onFrame(e.payload));
+    // This window's own listener: a global `listen` also receives events sent to other windows.
+    void getCurrentWebviewWindow().listen<FrameEvent>("win-frame", (e) => this.onFrame(e.payload));
     store.onChange((v) => this.syncPin(v));
     this.syncPin(store.get());
     dbg(`init margin=${marginPx}px dpr=${window.devicePixelRatio} inner=${window.innerWidth}x${window.innerHeight} root=${fmtRect(root)} stage=${fmtRect(stage.el)}`);

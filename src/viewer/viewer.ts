@@ -1,5 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "../design.css";
 import "./viewer.css";
 import { ipc, type Settings } from "../ipc.ts";
@@ -20,7 +21,8 @@ async function main(): Promise<void> {
 
   if (init.stream) {
     stage.enableStream();
-    await listen<string>("video-frame", (e) => stage.pushFrame(e.payload));
+    // This window's own listener: a global `listen` also receives frames sent to other windows.
+    await getCurrentWebviewWindow().listen<string>("video-frame", (e) => stage.pushFrame(e.payload));
   }
 
   new PointerController(stage, store);
