@@ -17,7 +17,7 @@ use std::sync::atomic::Ordering;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 
 use pinit_core::geometry::Rect;
 
@@ -100,6 +100,21 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// The primary mouse button is held: a resize happening now is the user dragging an edge,
+/// not the app placing the window.
+fn left_button_down() -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+        // SAFETY: plain query with no pointers.
+        unsafe { GetAsyncKeyState(VK_LBUTTON as i32) < 0 }
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
     let label = window.label();
     if label == "main" {
@@ -114,7 +129,15 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
     match event {
         WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
             if let (Ok(p), Ok(s)) = (window.outer_position(), window.outer_size()) {
-                state.send(Msg::Bounds(id, Rect::new(p.x, p.y, s.width as i32, s.height as i32)));
+                let rect = Rect::new(p.x, p.y, s.width as i32, s.height as i32);
+                state.send(Msg::Bounds(id, rect));
+                // The viewer keeps its picture fixed on screen while the user drags an edge
+                // (see ResizeAnchor.ts); it needs the exact rect and whether this is a user drag.
+                let _ = window.emit_to(
+                    label,
+                    "win-geometry",
+                    serde_json::json!({ "x": rect.x, "y": rect.y, "w": rect.w, "h": rect.h, "user": left_button_down() }),
+                );
             }
         }
         WindowEvent::Destroyed => {

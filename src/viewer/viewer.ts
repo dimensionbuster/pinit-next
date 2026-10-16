@@ -24,7 +24,7 @@ async function main(): Promise<void> {
 
   new PointerController(stage, store);
   new KeyboardController(store);
-  const anchor = new ResizeAnchor(stage, store);
+  new ResizeAnchor(stage, store);
 
   const applyBackdrop = (s: Settings) => stage.setBackdrop(backdropCss(s.backdrop_color, s.backdrop_opacity));
   applyBackdrop(await ipc.getSettings());
@@ -32,7 +32,7 @@ async function main(): Promise<void> {
 
   const root = document.getElementById("root");
   if (!root) throw new Error("missing #root");
-  root.append(stage.el, new Toolbar(store).el, h("div", { class: "grips" }, ...createResizeGrips(anchor)));
+  root.append(stage.el, new Toolbar(store).el, h("div", { class: "grips" }, ...createResizeGrips()));
 }
 
 main().catch((e) => {

@@ -1,54 +1,45 @@
-import type { ViewState } from "../ipc.ts";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import type { Stage } from "./Stage.ts";
-import { anchorOnResize, type Box, type DragEdges } from "./transform.ts";
+import { anchorOnResize, draggedEdges, type Rect } from "./transform.ts";
 import type { ViewStore } from "./ViewStore.ts";
 
-interface Base {
-  view: ViewState;
-  fit: number;
-  win: Box;
-  edges: DragEdges;
+/** `win-geometry` from Rust: the window's rect (physical px) and whether the mouse button is down. */
+interface Geometry extends Rect {
+  user: boolean;
 }
 
-/** Ignore pointer moves right after a grip press: the OS resize loop has not started yet. */
-const SETTLE_MS = 300;
-
 /**
- * While the user drags a window edge, the picture stays put on screen at the same scale and
- * only the window (the mask) grows or shrinks. Uses just the window size and the dragged
- * edges (see `anchorOnResize`), so there is no screen-position tracking to go stale.
+ * The picture is a layer fixed on screen and the window is a mask over it: while the user drags
+ * a window edge the picture keeps its place and scale, only the mask edge moves.
+ *
+ * Rust reports every window rect change. The previous and new rect tell which edges moved
+ * (`draggedEdges`), and the sizes come from these rects, never from the DOM (which lags the
+ * window by a frame). The same sizes are handed to the stage for rendering.
  */
 export class ResizeAnchor {
-  private base: Base | null = null;
-  private startedAt = 0;
+  private prev: Rect | null = null;
 
   constructor(private readonly stage: Stage, private readonly store: ViewStore) {
-    new ResizeObserver(() => this.apply()).observe(stage.el);
-    // The OS resize loop swallows pointer events; the first one afterwards ends the drag.
-    window.addEventListener("pointermove", () => this.end(), true);
-    window.addEventListener("pointerup", () => this.end(), true);
+    void listen<Geometry>("win-geometry", (e) => this.onGeometry(e.payload));
+    const win = getCurrentWindow();
+    void Promise.all([win.outerPosition(), win.outerSize()]).then(([p, s]) => {
+      this.prev ??= { x: p.x, y: p.y, w: s.width, h: s.height };
+    });
   }
 
-  /** Call on grip press with the grip direction, before the OS resize starts. */
-  begin(dir: string): void {
-    const win = this.stage.windowBox();
-    this.base = {
-      view: this.store.get(),
-      fit: this.stage.fitScale(win),
-      win,
-      edges: { west: dir.includes("West"), north: dir.includes("North") },
-    };
-    this.startedAt = performance.now();
-  }
-
-  private end(): void {
-    if (this.base && performance.now() - this.startedAt > SETTLE_MS) this.base = null;
-  }
-
-  private apply(): void {
-    const b = this.base;
-    const win = this.stage.windowBox();
-    if (!b || win.w === 0 || win.h === 0) return;
-    this.store.set(anchorOnResize(b.view, b.fit, b.win, this.stage.fitScale(win), win, b.edges));
+  private onGeometry(g: Geometry): void {
+    const dpr = window.devicePixelRatio;
+    const css = (r: Rect) => ({ w: r.w / dpr, h: r.h / dpr });
+    const edges = this.prev && g.user ? draggedEdges(this.prev, g) : null;
+    if (this.prev && edges) {
+      const win0 = css(this.prev);
+      const win1 = css(g);
+      this.store.set(
+        anchorOnResize(this.store.get(), this.stage.fitScale(win0), win0, this.stage.fitScale(win1), win1, edges),
+      );
+    }
+    this.prev = { x: g.x, y: g.y, w: g.w, h: g.h };
+    this.stage.setWindowBox(css(g));
   }
 }

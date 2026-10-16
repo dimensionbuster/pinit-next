@@ -94,6 +94,29 @@ export interface DragEdges {
   north: boolean;
 }
 
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Which edges moved between two window rects. Per axis, if the size changed the edge that kept
+ * its screen position is the fixed one; if neither did (app placed the window, DPI change) the
+ * change is not an edge drag and null is returned.
+ */
+export function draggedEdges(a: Rect, b: Rect): DragEdges | null {
+  if (a.w === b.w && a.h === b.h) return null;
+  const axis = (p0: number, s0: number, p1: number, s1: number): boolean | null => {
+    if (s0 === s1 || p0 === p1) return false; // unchanged, or the near edge stayed: far edge dragged
+    return p0 + s0 === p1 + s1 ? true : null; // far edge stayed: near edge dragged
+  };
+  const west = axis(a.x, a.w, b.x, b.w);
+  const north = axis(a.y, a.h, b.y, b.h);
+  return west === null || north === null ? null : { west, north };
+}
+
 /**
  * Window resized from `win0` to `win1` by dragging `edges`: keep the picture fixed on screen so
  * only the mask edge moves. The edges not being dragged do not move, so the picture centre is

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  anchorOnResize, backdropCss, cssTransform, defaultView, fitScale, flipScreen, imageBox, normalizeAngle,
+  anchorOnResize, backdropCss, cssTransform, defaultView, draggedEdges, fitScale, flipScreen, imageBox, normalizeAngle,
   rotateAboutCenter, rotateQuarter, zoomAt, MAX_ZOOM,
 } from "./transform.ts";
 
@@ -107,6 +107,16 @@ test("anchorOnResize keeps the picture fixed on screen for every dragged edge", 
       near(screen1.y + win1.h / 2 + out.pan_y, screen0.y + win0.h / 2 + v.pan_y);
     }
   }
+});
+
+test("draggedEdges tells which edges a resize moved", () => {
+  const a = { x: 100, y: 100, w: 400, h: 300 };
+  assert.equal(draggedEdges(a, { ...a, x: 150 }), null); // plain move
+  assert.deepEqual(draggedEdges(a, { ...a, w: 500 }), { west: false, north: false }); // east
+  assert.deepEqual(draggedEdges(a, { ...a, x: 50, w: 450 }), { west: true, north: false }); // west
+  assert.deepEqual(draggedEdges(a, { ...a, y: 60, h: 340 }), { west: false, north: true }); // north
+  assert.deepEqual(draggedEdges(a, { x: 60, y: 60, w: 440, h: 340 }), { west: true, north: true }); // corner
+  assert.equal(draggedEdges(a, { x: 10, y: 100, w: 300, h: 300 }), null); // placed by the app
 });
 
 test("backdropCss builds rgba and repairs bad input", () => {
