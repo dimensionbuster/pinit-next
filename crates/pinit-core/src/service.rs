@@ -6,7 +6,7 @@ use std::fmt;
 use crate::geometry::{Point, Rect};
 use crate::image_ref::ImageRef;
 use crate::placement::{
-    relayout, Anchor, FrontierPlacement, PlacementRequest, PlacementStrategy, SizeRule,
+    relayout_mixed, Anchor, FrontierPlacement, PlacementRequest, PlacementStrategy, Slot, SizeRule,
 };
 use crate::ports::{
     Display, DisplayId, DisplayProvider, HostError, ImageResolver, ResolveError, ResolvedImage,
@@ -50,6 +50,7 @@ impl LayoutConfig {
 pub struct Restore {
     pub bounds: Rect,
     pub view: ViewState,
+    pub user_sized: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,13 +93,26 @@ struct Entry {
     /// Last bounds the service itself set (open/refit/relayout/fit); lets
     /// `fit_to_aspect` tell which side the user dragged.
     last_fit: Rect,
+    /// The user resized this window by hand (size drifted from `last_fit`).
+    user_sized: bool,
     view: ViewState,
     natural_aspect: f64,
 }
 
+/// Slack for the OS rounding a size the service asked for (DPI, min size).
+const SIZE_TOLERANCE: i32 = 4;
+
 impl Entry {
     fn aspect(&self) -> f64 {
         self.view.effective_aspect(self.natural_aspect)
+    }
+
+    /// Hand-resized, zoomed or rotated: "keep current size" leaves it alone.
+    fn is_touched(&self) -> bool {
+        self.user_sized
+            || (self.view.zoom - 1.0).abs() > 1e-6
+            || self.view.quarter_turns != 0
+            || self.view.fine_angle_deg.abs() > 1e-6
     }
 }
 
@@ -156,6 +170,7 @@ impl OpenService {
             .aspect()
             .ok_or_else(|| OpenError::Resolve(ResolveError::Failed("image has no size".into())))?;
         let view = restore.as_ref().map(|r| r.view).unwrap_or_default();
+        let user_sized = restore.as_ref().is_some_and(|r| r.user_sized);
         let aspect = view.effective_aspect(natural_aspect);
 
         let displays = self.displays.displays();
@@ -196,6 +211,7 @@ impl OpenService {
             display_id,
             bounds,
             last_fit: bounds,
+            user_sized,
             view,
             natural_aspect,
         });
@@ -211,6 +227,11 @@ impl OpenService {
     pub fn on_bounds_changed(&mut self, id: WindowId, bounds: Rect) {
         let displays = self.displays.displays();
         if let Some(e) = self.windows.iter_mut().find(|e| e.id == id) {
+            if (bounds.w - e.last_fit.w).abs() > SIZE_TOLERANCE
+                || (bounds.h - e.last_fit.h).abs() > SIZE_TOLERANCE
+            {
+                e.user_sized = true;
+            }
             e.bounds = bounds;
             if let Some(d) = display_for_rect(&displays, &bounds) {
                 e.display_id = d.id;
@@ -277,8 +298,9 @@ impl OpenService {
     }
 
     /// Re-pack every window per display from the anchor. Opening order is the
-    /// fill order. With `keep_sizes` each window keeps its current width and
-    /// height (only positions change); otherwise sizes are recomputed from the
+    /// fill order. With `keep_sizes` only the windows the user touched (resized
+    /// by hand, zoomed or rotated) keep their current width and height; the
+    /// rest follow the size rule. Without it every size is recomputed from the
     /// image aspect and the configured size rule (best of several seeds).
     pub fn relayout_all(&mut self, keep_sizes: bool) {
         let displays = self.displays.displays();
@@ -291,27 +313,35 @@ impl OpenService {
                 continue;
             }
             let strategy = self.config.strategy(d.scale);
-            let rects: Vec<Rect> = if keep_sizes {
-                let mut placed: Vec<Rect> = Vec::with_capacity(idx.len());
-                for &i in &idx {
-                    let b = self.windows[i].bounds;
-                    let r = strategy.place_exact(&placed, d.work_area, b.w, b.h).rect;
-                    placed.push(r);
-                }
-                placed
-            } else {
-                let aspects: Vec<f64> = idx.iter().map(|&i| self.windows[i].aspect()).collect();
-                relayout(&strategy, d.work_area, &aspects, base_seed..base_seed + RELAYOUT_SEEDS, |s| {
-                    Box::new(SplitMix64::new(s))
+            let slots: Vec<Slot> = idx
+                .iter()
+                .map(|&i| {
+                    let e = &self.windows[i];
+                    if keep_sizes && e.is_touched() {
+                        Slot::Exact { w: e.bounds.w, h: e.bounds.h }
+                    } else {
+                        Slot::Rule(e.aspect())
+                    }
                 })
-                .into_iter()
-                .map(|p| p.rect)
-                .collect()
-            };
+                .collect();
+            let rects: Vec<Rect> = relayout_mixed(
+                &strategy,
+                d.work_area,
+                &slots,
+                base_seed..base_seed + RELAYOUT_SEEDS,
+                |s| Box::new(SplitMix64::new(s)),
+            )
+            .into_iter()
+            .map(|p| p.rect)
+            .collect();
             for (&i, rect) in idx.iter().zip(rects) {
-                self.windows[i].bounds = rect;
-                self.windows[i].last_fit = rect;
-                self.host.set_bounds(self.windows[i].id, rect);
+                let e = &mut self.windows[i];
+                if !(keep_sizes && e.is_touched()) {
+                    e.user_sized = false;
+                }
+                e.bounds = rect;
+                e.last_fit = rect;
+                self.host.set_bounds(e.id, rect);
             }
         }
     }
@@ -319,7 +349,7 @@ impl OpenService {
     pub fn snapshot(&self) -> Vec<SavedWindow> {
         self.windows
             .iter()
-            .map(|e| SavedWindow { image: e.image.clone(), bounds: e.bounds, view: e.view })
+            .map(|e| SavedWindow { image: e.image.clone(), bounds: e.bounds, view: e.view, user_sized: e.user_sized })
             .collect()
     }
 
@@ -555,6 +585,26 @@ mod tests {
     }
 
     #[test]
+    fn keep_sizes_only_pins_windows_the_user_touched() {
+        let (mut svc, log) = service(None, None);
+        svc.open(req("a")).unwrap(); // 300x300 grid cell
+        svc.open(req("b")).unwrap();
+        svc.open(req("c")).unwrap();
+        // b resized by hand; c zoomed; a untouched. The host echoing our own size is not a user resize.
+        svc.on_bounds_changed(1, Rect::new(0, 0, 301, 299));
+        svc.on_bounds_changed(2, Rect::new(900, 100, 250, 640));
+        let mut v = ViewState::default();
+        v.zoom = 2.0;
+        svc.set_view(3, v);
+        svc.relayout_all(true);
+        let l = log.lock().unwrap();
+        let last: Vec<(WindowId, Rect)> = l.bounds.iter().rev().take(3).rev().cloned().collect();
+        assert_eq!(last[0], (1, Rect::new(0, 0, 300, 300)));
+        assert_eq!(last[1], (2, Rect::new(300, 0, 250, 640)));
+        assert_eq!((last[2].1.w, last[2].1.h), (300, 300));
+    }
+
+    #[test]
     fn grid_line_is_dip_scaled_per_display() {
         let log = Arc::new(Mutex::new(HostLog::default()));
         let mut displays = two_displays();
@@ -644,9 +694,9 @@ mod tests {
     #[test]
     fn restore_keeps_saved_bounds_when_still_on_screen_else_replaces() {
         let (mut svc, log) = service(None, None);
-        let on = Restore { bounds: Rect::new(100, 100, 250, 250), view: ViewState::default() };
+        let on = Restore { bounds: Rect::new(100, 100, 250, 250), view: ViewState::default(), user_sized: false };
         svc.open(OpenRequest { image: url("a"), restore: Some(on) }).unwrap();
-        let off = Restore { bounds: Rect::new(9000, 9000, 250, 250), view: ViewState::default() };
+        let off = Restore { bounds: Rect::new(9000, 9000, 250, 250), view: ViewState::default(), user_sized: false };
         svc.open(OpenRequest { image: url("b"), restore: Some(off) }).unwrap();
         let l = log.lock().unwrap();
         assert_eq!(l.opened[0].bounds, Rect::new(100, 100, 250, 250));

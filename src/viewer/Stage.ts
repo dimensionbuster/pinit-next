@@ -1,5 +1,5 @@
 import { h } from "../ui/dom.ts";
-import { cssTransform, imageBox, type Box } from "./transform.ts";
+import { cssTransform, fitScale, imageBox, type Box } from "./transform.ts";
 import type { ViewStore } from "./ViewStore.ts";
 
 /** Renders the image and keeps its transform in sync with the store and window size. */
@@ -28,6 +28,12 @@ export class Stage {
 
   windowBox(): Box {
     return { w: this.el.clientWidth, h: this.el.clientHeight };
+  }
+
+  /** Fit scale (unzoomed image vs window); 0 until the image has loaded. */
+  fitScale(win: Box = this.windowBox()): number {
+    const natural = { w: this.img.naturalWidth, h: this.img.naturalHeight };
+    return fitScale(win, this.store.get().quarter_turns, natural);
   }
 
   private showStatus(text: string): void {

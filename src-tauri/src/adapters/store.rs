@@ -158,6 +158,9 @@ struct SavedDto {
     image: ImageDto,
     bounds: [i32; 4],
     view: ViewDto,
+    /// Absent in older session files = not hand-sized.
+    #[serde(default)]
+    user_sized: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -186,6 +189,7 @@ impl SavedDto {
                 flip_h: v.flip_h,
                 flip_v: v.flip_v,
             },
+            user_sized: w.user_sized,
         })
     }
 
@@ -208,6 +212,7 @@ impl SavedDto {
                 flip_h: v.flip_h,
                 flip_v: v.flip_v,
             },
+            user_sized: self.user_sized,
         }
     }
 }
@@ -306,11 +311,13 @@ mod tests {
                 image: ImageRef::Url { url: "https://e.com/a.jpg".into(), referer: Some("https://e.com/".into()) },
                 bounds: Rect::new(-1920, 40, 600, 300),
                 view,
+                user_sized: true,
             },
             SavedWindow {
                 image: ImageRef::File(PathBuf::from(r"C:\pics\b.png")),
                 bounds: Rect::new(0, 0, 300, 300),
                 view: ViewState::default(),
+                user_sized: false,
             },
         ];
         store.save(&saved);
@@ -323,6 +330,7 @@ mod tests {
             image: ImageRef::Url { url: "https://e.com/a.jpg".into(), referer: None },
             bounds: Rect::new(10, 20, 300, 200),
             view: ViewState::default(),
+            user_sized: false,
         }];
         assert_eq!(decode_layout(&encode_layout(&saved)), Some(saved));
         assert_eq!(decode_layout(b"{}"), None);

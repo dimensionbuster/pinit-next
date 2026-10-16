@@ -169,7 +169,7 @@ pub fn open_saved_in_background(app: &AppHandle, saved: Vec<SavedWindow>) {
     std::thread::spawn(move || {
         let state = app.state::<AppState>();
         for w in saved {
-            let restore = Restore { bounds: w.bounds, view: w.view };
+            let restore = Restore { bounds: w.bounds, view: w.view, user_sized: w.user_sized };
             if let Err(e) = state.open_one(w.image, Some(restore)) {
                 eprintln!("restore failed: {e}");
             }

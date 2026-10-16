@@ -327,6 +327,47 @@ pub fn relayout(
     best.map(|(_, p)| p).unwrap_or_default()
 }
 
+/// One window in a mixed re-layout.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Slot {
+    /// Size comes from the size rule for this content aspect.
+    Rule(f64),
+    /// The user chose this size; it is kept as is.
+    Exact { w: i32, h: i32 },
+}
+
+/// Like [`relayout`], but some windows keep an exact size while the rest
+/// follow the size rule. `slots` are in fill order; placements come back in
+/// the same order.
+pub fn relayout_mixed(
+    strategy: &FrontierPlacement,
+    area: Rect,
+    slots: &[Slot],
+    seeds: impl IntoIterator<Item = u64>,
+    make_rng: impl Fn(u64) -> Box<dyn Rng>,
+) -> Vec<Placement> {
+    let mut best: Option<(i64, Vec<Placement>)> = None;
+    for seed in seeds {
+        let mut rng = make_rng(seed);
+        let mut placed: Vec<Placement> = Vec::with_capacity(slots.len());
+        let mut rects: Vec<Rect> = Vec::with_capacity(slots.len());
+        for slot in slots {
+            let p = match *slot {
+                Slot::Rule(aspect) => strategy
+                    .place(&PlacementRequest { existing: &rects, area, aspect }, rng.as_mut()),
+                Slot::Exact { w, h } => strategy.place_exact(&rects, area, w, h),
+            };
+            rects.push(p.rect);
+            placed.push(p);
+        }
+        let score = waste(&placed);
+        if best.as_ref().is_none_or(|(s, _)| score < *s) {
+            best = Some((score, placed));
+        }
+    }
+    best.map(|(_, p)| p).unwrap_or_default()
+}
+
 /// Unused area inside the bounding box of the layout; overflow is heavily penalised.
 pub fn waste(placed: &[Placement]) -> i64 {
     if placed.is_empty() {

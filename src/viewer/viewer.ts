@@ -5,6 +5,7 @@ import "./viewer.css";
 import { ipc, type Settings } from "../ipc.ts";
 import { h } from "../ui/dom.ts";
 import { KeyboardController, PointerController } from "./controllers.ts";
+import { ResizeAnchor } from "./ResizeAnchor.ts";
 import { createResizeGrips } from "./ResizeGrips.ts";
 import { Stage } from "./Stage.ts";
 import { Toolbar } from "./Toolbar.ts";
@@ -18,6 +19,7 @@ async function main(): Promise<void> {
 
   new PointerController(stage, store);
   new KeyboardController(store);
+  const anchor = new ResizeAnchor(stage, store);
 
   const applyBackdrop = (s: Settings) => stage.setBackdrop(backdropCss(s.backdrop_color, s.backdrop_opacity));
   applyBackdrop(await ipc.getSettings());
@@ -25,7 +27,7 @@ async function main(): Promise<void> {
 
   const root = document.getElementById("root");
   if (!root) throw new Error("missing #root");
-  root.append(stage.el, new Toolbar(store).el, h("div", { class: "grips" }, ...createResizeGrips()));
+  root.append(stage.el, new Toolbar(store).el, h("div", { class: "grips" }, ...createResizeGrips(anchor)));
 }
 
 main().catch((e) => {
