@@ -88,6 +88,15 @@ export function fitScale(win: Box, quarterTurns: number, natural: Box): number {
   return Math.min(box.w / natural.w, box.h / natural.h);
 }
 
+/**
+ * Zoomed or rotated by the user. Only such windows pin the picture on screen while the window is
+ * resized; any other window (including one reset with "원래대로") lets the picture follow the window.
+ * Panning and flipping alone do not count. Matches `Entry::is_touched` in the core service.
+ */
+export function isTouched(v: ViewState): boolean {
+  return v.zoom !== 1 || v.quarter_turns !== 0 || v.fine_angle_deg !== 0;
+}
+
 /** Which window edges a resize drag moves (the opposite edges stay put on screen). */
 export interface DragEdges {
   west: boolean;

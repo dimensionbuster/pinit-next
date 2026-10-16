@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  anchorOnResize, backdropCss, cssTransform, defaultView, draggedEdges, fitScale, flipScreen, imageBox, normalizeAngle,
+  anchorOnResize, backdropCss, cssTransform, defaultView, draggedEdges, fitScale, flipScreen, imageBox, isTouched, normalizeAngle,
   rotateAboutCenter, rotateQuarter, zoomAt, MAX_ZOOM,
 } from "./transform.ts";
 
@@ -107,6 +107,15 @@ test("anchorOnResize keeps the picture fixed on screen for every dragged edge", 
       near(screen1.y + win1.h / 2 + out.pan_y, screen0.y + win0.h / 2 + v.pan_y);
     }
   }
+});
+
+test("only zoomed or rotated views count as touched; reset and flips/pan do not", () => {
+  assert.equal(isTouched(defaultView()), false);
+  assert.equal(isTouched({ ...defaultView(), flip_h: true, pan_x: 30 }), false);
+  assert.equal(isTouched({ ...defaultView(), zoom: 1.2 }), true);
+  assert.equal(isTouched({ ...defaultView(), zoom: 0.5 }), true);
+  assert.equal(isTouched({ ...defaultView(), quarter_turns: 1 }), true);
+  assert.equal(isTouched({ ...defaultView(), fine_angle_deg: -3 }), true);
 });
 
 test("draggedEdges tells which edges a resize moved", () => {
