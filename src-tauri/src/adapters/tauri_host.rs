@@ -63,6 +63,8 @@ pub struct ViewerInit {
     pub view: ViewJson,
     /// Original URL (for "open source page"); None for local files.
     pub source_url: Option<String>,
+    /// Live video: frames arrive as `video-frame` events instead of a static file.
+    pub stream: bool,
 }
 
 pub type Registry = Arc<Mutex<HashMap<String, ViewerInit>>>;
@@ -136,6 +138,7 @@ impl WindowHost for TauriHost {
                 height: spec.image.height,
                 view: spec.view.into(),
                 source_url,
+                stream: crate::video_bridge::is_stream_still(&spec.image.local_path),
             },
         );
 

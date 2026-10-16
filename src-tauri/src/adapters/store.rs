@@ -173,6 +173,8 @@ impl SavedDto {
     fn from_core(w: &SavedWindow) -> Option<Self> {
         let image = match &w.image {
             ImageRef::Url { url, referer } => ImageDto::Url { url: url.clone(), referer: referer.clone() },
+            // the staged first frame of a live video: the stream is gone after a restart
+            ImageRef::File(path) if crate::video_bridge::is_stream_still(path) => return None,
             ImageRef::File(path) => ImageDto::File { path: path.clone() },
             ImageRef::Bytes { .. } => return None, // service persists these as cached files
         };

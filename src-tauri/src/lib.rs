@@ -7,8 +7,11 @@ pub mod date;
 pub mod extension_bundle;
 pub mod native_host;
 pub mod paths;
+pub mod pipe;
 pub mod shell_menu;
 pub mod update;
+pub mod video_bridge;
+pub mod video_host;
 
 use std::sync::atomic::Ordering;
 
@@ -151,6 +154,12 @@ pub fn run() {
             let state = AppState::build(&handle)?;
             app.manage(state);
             build_tray(&handle)?;
+            {
+                let paths = paths::Paths::detect();
+                if let Err(e) = video_bridge::start(&handle, &paths.inbox) {
+                    eprintln!("video bridge unavailable: {e}");
+                }
+            }
             if cfg!(debug_assertions) {
                 if let Some(w) = handle.get_webview_window("main") {
                     let _ = w.set_title("PinIt (DEV)");

@@ -17,6 +17,8 @@ export interface ViewerInit {
   height: number;
   view: ViewState;
   source_url: string | null;
+  /** Live video window: frames arrive as `video-frame` events. */
+  stream: boolean;
 }
 
 export type Theme = "system" | "light" | "dark";

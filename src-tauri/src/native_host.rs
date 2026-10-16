@@ -135,7 +135,7 @@ pub fn handle_message(bytes: &[u8], env: &dyn HostEnv) -> Value {
 
 // --------------------------------------------------------------- real world
 
-struct RealEnv;
+pub(crate) struct RealEnv;
 
 impl HostEnv for RealEnv {
     fn launch(&self, args: Vec<String>) -> io::Result<()> {
@@ -196,7 +196,15 @@ pub fn run() -> i32 {
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
     let reply = match read_frame(&mut stdin) {
-        Ok(Some(bytes)) => handle_message(&bytes, &RealEnv),
+        Ok(Some(bytes)) => {
+            if let Some(start) = crate::video_host::parse_start(&bytes) {
+                // the stream mode locks stdin itself (a std Mutex, not reentrant)
+                drop(stdin);
+                drop(stdout);
+                return crate::video_host::run(&start);
+            }
+            handle_message(&bytes, &RealEnv)
+        }
         Ok(None) => return 0,
         Err(e) => json!({ "ok": false, "error": e.to_string() }),
     };

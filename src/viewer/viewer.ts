@@ -17,6 +17,11 @@ async function main(): Promise<void> {
   const store = new ViewStore(init.view, (v) => void ipc.viewerSetView(v));
   const stage = new Stage(convertFileSrc(init.path), store);
 
+  if (init.stream) {
+    stage.enableStream();
+    await listen<string>("video-frame", (e) => stage.pushFrame(e.payload));
+  }
+
   new PointerController(stage, store);
   new KeyboardController(store);
   const anchor = new ResizeAnchor(stage, store);

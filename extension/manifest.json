@@ -2,11 +2,13 @@
   "manifest_version": 3,
   "name": "PinIt",
   "version": "0.1.0",
-  "description": "Open any image in a PinIt always-on-top window from the right-click menu.",
+  "description": "Open any image, or the playing video, in a PinIt always-on-top window.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoK50zEpwG60JICSX5yP64Q93FCPlokGLbAKYTq1z98WqfvOOFUy8tjdpAGvs0pveFRLVy/9GlWYjleSufFlMBrU9yb4wvpe3n56d8JncXRFHfoclRg4sHbhfDdL4gZTi8ZBplXds3qgkB3b0C8u/kq8Zlfs23oPGXV5xa7yC97uduD7bjTXN4KH4dp58DETNAL/oMvt0f7trhDNpXk89e+DjirXXq7hjcQJSg43M3weQwO5O4MKiTJOJPAJy64F0NSBqN74HCaueEoqkBCxWpPzBVHrkDbAbKmFICnqTlIThnxC4Hefvp3QmXyd5+YKPSlr63UOIeaTlgpMUmFrTwQIDAQAB",
   "permissions": [
+    "activeTab",
     "contextMenus",
-    "nativeMessaging"
+    "nativeMessaging",
+    "scripting"
   ],
   "background": {
     "service_worker": "background.js"
