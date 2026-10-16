@@ -59,6 +59,8 @@ html, body { background: transparent; overflow: hidden; user-select: none; }
 /* pill: revealed near the bottom edge, or on demand in compact windows */
 .overlay.near-bottom:not(.compact) .pill, .overlay:not(.compact) .pill:hover,
 .overlay:not(.compact) .pill:focus-within, .overlay.compact.expanded .pill { opacity: 1; pointer-events: auto; }
+/* a child's own `pointer-events: auto` would otherwise win over the hidden pill's `none` */
+.pill .tb-btn { pointer-events: inherit; }
 .sep { width: 1px; height: 16px; margin: 0 3px; background: rgba(255, 255, 255, 0.16); }
 
 .angle-chip {
