@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import "../design.css";
 import "./viewer.css";
 import { ipc, type Settings } from "../ipc.ts";
+import { dbg } from "./debug.ts";
 import { h } from "../ui/dom.ts";
 import { KeyboardController, PointerController } from "./controllers.ts";
 import { ResizeAnchor } from "./ResizeAnchor.ts";
@@ -24,7 +25,6 @@ async function main(): Promise<void> {
 
   new PointerController(stage, store);
   new KeyboardController(store);
-  new ResizeAnchor(stage, store);
 
   const applyBackdrop = (s: Settings) => stage.setBackdrop(backdropCss(s.backdrop_color, s.backdrop_opacity));
   applyBackdrop(await ipc.getSettings());
@@ -33,7 +33,11 @@ async function main(): Promise<void> {
   const root = document.getElementById("root");
   if (!root) throw new Error("missing #root");
   root.append(stage.el, new Toolbar(store).el, h("div", { class: "grips" }, ...createResizeGrips()));
+  new ResizeAnchor(root, stage, store, init.margin);
 }
+
+window.addEventListener("error", (e) => dbg(`error: ${e.message} @${e.filename}:${e.lineno}`));
+window.addEventListener("unhandledrejection", (e) => dbg(`unhandled rejection: ${String(e.reason)}`));
 
 main().catch((e) => {
   document.body.textContent = String(e);

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  anchorOnResize, backdropCss, cssTransform, defaultView, draggedEdges, fitScale, flipScreen, imageBox, isTouched, normalizeAngle,
+  anchorOnFrame, backdropCss, cssTransform, defaultView, fitScale, flipScreen, imageBox, isTouched, normalizeAngle,
   rotateAboutCenter, rotateQuarter, zoomAt, MAX_ZOOM,
 } from "./transform.ts";
 
@@ -86,27 +86,38 @@ test("rotateAboutCenter turns the picture about the window centre", () => {
   near(a.y, b.x * Math.sin(r) + b.y * Math.cos(r));
 });
 
-test("anchorOnResize keeps the picture fixed on screen for every dragged edge", () => {
+test("anchorOnFrame keeps the picture's place and on-screen scale as the frame changes", () => {
   const v = { ...defaultView(), zoom: 1.5, pan_x: 12, pan_y: -8, quarter_turns: 1, fine_angle_deg: 25 };
   const nat = { w: 800, h: 600 };
-  const win0 = { w: 400, h: 300 };
-  const screen0 = { x: 1000, y: 500 }; // window top-left on screen
-  for (const [west, north] of [[false, false], [true, false], [false, true], [true, true]]) {
-    for (const win1 of [{ w: 700, h: 450 }, { w: 250, h: 120 }]) {
-      // west/north drags move the window origin so the opposite edges stay put
-      const screen1 = {
-        x: screen0.x + (west ? win0.w - win1.w : 0),
-        y: screen0.y + (north ? win0.h - win1.h : 0),
-      };
-      const fit0 = fitScale(win0, v.quarter_turns, nat);
-      const fit1 = fitScale(win1, v.quarter_turns, nat);
-      const out = anchorOnResize(v, fit0, win0, fit1, win1, { west, north });
-      near(fit1 * out.zoom, fit0 * v.zoom); // same on-screen scale
-      // picture centre on screen = window origin + window centre + pan
-      near(screen1.x + win1.w / 2 + out.pan_x, screen0.x + win0.w / 2 + v.pan_x);
-      near(screen1.y + win1.h / 2 + out.pan_y, screen0.y + win0.h / 2 + v.pan_y);
-    }
+  const f0 = { x: 100, y: 100, w: 400, h: 300 }; // window sits at the surface margin
+  // frames the window can take inside a surface fixed on screen: dragged west/north (frame
+  // origin moves), east/south (size only), grown or shrunk
+  for (const f1 of [
+    { x: 30, y: 10, w: 470, h: 390 },
+    { x: 180, y: 140, w: 320, h: 160 },
+    { x: 100, y: 100, w: 900, h: 700 },
+    { x: 160, y: 100, w: 340, h: 300 },
+  ]) {
+    const fit0 = fitScale(f0, v.quarter_turns, nat);
+    const fit1 = fitScale(f1, v.quarter_turns, nat);
+    const out = anchorOnFrame(v, fit0, f0, fit1, f1);
+    near(fit1 * out.zoom, fit0 * v.zoom); // same on-screen scale
+    near(f1.x + f1.w / 2 + out.pan_x, f0.x + f0.w / 2 + v.pan_x); // same centre in the surface
+    near(f1.y + f1.h / 2 + out.pan_y, f0.y + f0.h / 2 + v.pan_y);
   }
+});
+
+test("anchorOnFrame follows the surface origin when it had to move past its margin", () => {
+  const v = { ...defaultView(), zoom: 2, pan_x: 5, pan_y: 5 };
+  const f0 = { x: 0, y: 0, w: 400, h: 300 };
+  // the window grew 50px west beyond the margin: the surface origin moved 50px west on screen,
+  // so the window now sits at x=0 of a surface whose origin is 50px further left
+  const f1 = { x: 0, y: 0, w: 450, h: 300 };
+  const out = anchorOnFrame(v, 1, f0, 1, f1, { x: -50, y: 0 });
+  // picture centre on screen = surface origin + frame centre + pan; origin moved by -50
+  const screen0 = 0 + f0.x + f0.w / 2 + v.pan_x;
+  const screen1 = -50 + f1.x + f1.w / 2 + out.pan_x;
+  near(screen1, screen0);
 });
 
 test("only zoomed or rotated views count as touched; reset and flips/pan do not", () => {
@@ -116,16 +127,6 @@ test("only zoomed or rotated views count as touched; reset and flips/pan do not"
   assert.equal(isTouched({ ...defaultView(), zoom: 0.5 }), true);
   assert.equal(isTouched({ ...defaultView(), quarter_turns: 1 }), true);
   assert.equal(isTouched({ ...defaultView(), fine_angle_deg: -3 }), true);
-});
-
-test("draggedEdges tells which edges a resize moved", () => {
-  const a = { x: 100, y: 100, w: 400, h: 300 };
-  assert.equal(draggedEdges(a, { ...a, x: 150 }), null); // plain move
-  assert.deepEqual(draggedEdges(a, { ...a, w: 500 }), { west: false, north: false }); // east
-  assert.deepEqual(draggedEdges(a, { ...a, x: 50, w: 450 }), { west: true, north: false }); // west
-  assert.deepEqual(draggedEdges(a, { ...a, y: 60, h: 340 }), { west: false, north: true }); // north
-  assert.deepEqual(draggedEdges(a, { x: 60, y: 60, w: 440, h: 340 }), { west: true, north: true }); // corner
-  assert.equal(draggedEdges(a, { x: 10, y: 100, w: 300, h: 300 }), null); // placed by the app
 });
 
 test("backdropCss builds rgba and repairs bad input", () => {

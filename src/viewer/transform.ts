@@ -97,13 +97,8 @@ export function isTouched(v: ViewState): boolean {
   return v.zoom !== 1 || v.quarter_turns !== 0 || v.fine_angle_deg !== 0;
 }
 
-/** Which window edges a resize drag moves (the opposite edges stay put on screen). */
-export interface DragEdges {
-  west: boolean;
-  north: boolean;
-}
-
-export interface Rect {
+/** Where the window sits inside the page surface, in CSS px. */
+export interface Frame {
   x: number;
   y: number;
   w: number;
@@ -111,41 +106,26 @@ export interface Rect {
 }
 
 /**
- * Which edges moved between two window rects. Per axis, if the size changed the edge that kept
- * its screen position is the fixed one; if neither did (app placed the window, DPI change) the
- * change is not an edge drag and null is returned.
+ * The window moved/resized inside a surface that stayed put on screen: keep the picture where it
+ * is. Its centre in surface coordinates is frame centre + pan, its on-screen scale is
+ * fit * zoom; both are held, so `pan` absorbs the frame centre shift and `zoom` the change of
+ * the contain-fit scale. `origin` is how far the surface origin itself moved on screen (zero
+ * unless the surface had to grow westwards/northwards past its margin); the picture's centre in
+ * surface coordinates then moves the opposite way.
  */
-export function draggedEdges(a: Rect, b: Rect): DragEdges | null {
-  if (a.w === b.w && a.h === b.h) return null;
-  const axis = (p0: number, s0: number, p1: number, s1: number): boolean | null => {
-    if (s0 === s1 || p0 === p1) return false; // unchanged, or the near edge stayed: far edge dragged
-    return p0 + s0 === p1 + s1 ? true : null; // far edge stayed: near edge dragged
-  };
-  const west = axis(a.x, a.w, b.x, b.w);
-  const north = axis(a.y, a.h, b.y, b.h);
-  return west === null || north === null ? null : { west, north };
-}
-
-/**
- * Window resized from `win0` to `win1` by dragging `edges`: keep the picture fixed on screen so
- * only the mask edge moves. The edges not being dragged do not move, so the picture centre is
- * held at a constant distance from them; the centre (window centre + pan) shifts by half the
- * size change, towards the fixed side. On-screen scale is fit * zoom, so zoom absorbs the change
- * of the contain-fit scale. Needs no screen coordinates.
- */
-export function anchorOnResize(
+export function anchorOnFrame(
   v0: ViewState,
   fit0: number,
-  win0: Box,
+  f0: Frame,
   fit1: number,
-  win1: Box,
-  edges: DragEdges,
+  f1: Frame,
+  origin: { x: number; y: number } = { x: 0, y: 0 },
 ): ViewState {
   return {
     ...v0,
     zoom: fit0 > 0 && fit1 > 0 ? (v0.zoom * fit0) / fit1 : v0.zoom,
-    pan_x: v0.pan_x + ((win1.w - win0.w) / 2) * (edges.west ? 1 : -1),
-    pan_y: v0.pan_y + ((win1.h - win0.h) / 2) * (edges.north ? 1 : -1),
+    pan_x: v0.pan_x + (f0.x + f0.w / 2) - origin.x - (f1.x + f1.w / 2),
+    pan_y: v0.pan_y + (f0.y + f0.h / 2) - origin.y - (f1.y + f1.h / 2),
   };
 }
 

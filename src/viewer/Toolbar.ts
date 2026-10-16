@@ -63,12 +63,15 @@ export class Toolbar {
    */
   private watchPointer(): void {
     const root = document.documentElement;
+    // the window is the frame (#root = the overlay's parent), not the page surface around it
+    const frame = () => this.el.getBoundingClientRect();
     const setNear = (near: boolean) => this.el.classList.toggle("near-bottom", near);
-    const measure = () =>
-      this.el.classList.toggle("compact", Math.min(window.innerWidth, window.innerHeight) < COMPACT_PX);
-    measure();
-    window.addEventListener("resize", measure);
-    document.addEventListener("pointermove", (e) => setNear(e.clientY > window.innerHeight - NEAR_BOTTOM_PX));
+    const measure = () => {
+      const f = frame();
+      this.el.classList.toggle("compact", Math.min(f.width, f.height) < COMPACT_PX);
+    };
+    new ResizeObserver(measure).observe(this.el);
+    document.addEventListener("pointermove", (e) => setNear(e.clientY > frame().bottom - NEAR_BOTTOM_PX));
     root.addEventListener("mouseleave", () => {
       setNear(false);
       this.el.classList.remove("expanded");

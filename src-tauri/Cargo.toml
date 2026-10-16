@@ -23,8 +23,17 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = "3"
 
-# Named pipe for the live-video bridge (no network port): see src/pipe.rs
+# Named pipe for the live-video bridge (no network port): see src/pipe.rs.
+# webview2-com + windows: native anchoring of the WebView2 surface, see src/anchor.rs
+# (versions match what tauri already resolves).
 [target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security",
@@ -32,5 +41,4 @@ windows-sys = { version = "0.61", features = [
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
   "Win32_System_Pipes",
-  "Win32_UI_Input_KeyboardAndMouse",
 ] }

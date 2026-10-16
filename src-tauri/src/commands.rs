@@ -41,6 +41,20 @@ pub async fn viewer_set_view(window: WebviewWindow, view: ViewJson, state: State
     Ok(())
 }
 
+/// Viewer-side diagnostics, printed in the `npm run dev:app` terminal (debug builds only).
+#[tauri::command]
+pub fn viewer_log(window: WebviewWindow, msg: String) {
+    if cfg!(debug_assertions) {
+        eprintln!("[js {}] {msg}", window.label());
+    }
+}
+
+/// The view is zoomed/rotated (pinned) or untouched: see `anchor.rs`.
+#[tauri::command]
+pub fn viewer_pin(window: WebviewWindow, pinned: bool) {
+    crate::anchor::set_pinned(&window, pinned);
+}
+
 #[tauri::command]
 pub async fn viewer_fit(window: WebviewWindow, state: State<'_, AppState>) -> Res<()> {
     let id = id_from_label(window.label()).ok_or("not a viewer window")?;

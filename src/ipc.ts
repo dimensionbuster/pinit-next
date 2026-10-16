@@ -19,6 +19,8 @@ export interface ViewerInit {
   source_url: string | null;
   /** Live video window: frames arrive as `video-frame` events. */
   stream: boolean;
+  /** Physical px the page surface extends beyond the window to the west and north. */
+  margin: number;
 }
 
 export type Theme = "system" | "light" | "dark";
@@ -61,6 +63,8 @@ export interface UpdateInfo {
 export const ipc = {
   viewerInit: () => invoke<ViewerInit>("viewer_init"),
   viewerSetView: (view: ViewState) => invoke<void>("viewer_set_view", { view }),
+  viewerLog: (msg: string) => invoke<void>("viewer_log", { msg }),
+  viewerPin: (pinned: boolean) => invoke<void>("viewer_pin", { pinned }),
   viewerFit: () => invoke<void>("viewer_fit"),
   viewerClose: () => invoke<void>("viewer_close"),
   viewerOpenSource: () => invoke<void>("viewer_open_source"),

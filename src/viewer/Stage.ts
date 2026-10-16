@@ -12,7 +12,6 @@ export class Stage {
   private canvas: HTMLCanvasElement | null = null;
   private decoding = false;
   private pending: string | null = null;
-  private reported: Box | null = null;
 
   constructor(src: string, private readonly store: ViewStore) {
     this.img = h("img", { class: "image", alt: "", draggable: false });
@@ -80,17 +79,8 @@ export class Stage {
     }
   }
 
-  /**
-   * Window size as reported by the host. It is exact and leads the DOM, which lags the window
-   * by a frame while it is resized; the picture is positioned from it, not from the layout.
-   */
-  setWindowBox(box: Box): void {
-    this.reported = box;
-    this.render();
-  }
-
   windowBox(): Box {
-    return this.reported ?? { w: this.el.clientWidth, h: this.el.clientHeight };
+    return { w: this.el.clientWidth, h: this.el.clientHeight };
   }
 
   /** Fit scale (unzoomed image vs window); 0 until the image has loaded. */
@@ -112,8 +102,6 @@ export class Stage {
     if (win.w === 0 || win.h === 0) return;
     const v = this.store.get();
     const box = imageBox(win, v.quarter_turns);
-    this.surface.style.left = `${win.w / 2}px`;
-    this.surface.style.top = `${win.h / 2}px`;
     this.surface.style.width = `${box.w}px`;
     this.surface.style.height = `${box.h}px`;
     this.surface.style.transform = cssTransform(v);
