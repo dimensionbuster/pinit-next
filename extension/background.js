@@ -202,7 +202,8 @@ function pinitVideo(sid, start) {
   let sentTime = -1;
   let statFrames = 0;
   let statAt = performance.now();
-  const stop = () => {
+  let lastStep = 0; // when step() last ran, by any trigger
+  let stop = () => {
     if (stopped) return;
     stopped = true;
     try {
@@ -214,7 +215,10 @@ function pinitVideo(sid, start) {
     if (m && m.stop) stop();
     else if (m && m.size) shown = m.size;
   });
-  port.onDisconnect.addListener(() => (stopped = true));
+  port.onDisconnect.addListener(() => {
+    stop();
+    stopped = true;
+  });
 
   const toBase64 = (blob) =>
     new Promise((resolve, reject) => {
@@ -232,6 +236,7 @@ function pinitVideo(sid, start) {
       return;
     }
     const now = performance.now();
+    lastStep = now;
     // A paused video still gets its current frame shown (once, and again after a seek).
     const fresh = !video.paused || sentTime !== video.currentTime;
     if (inflight < MAX_INFLIGHT && fresh && video.readyState >= 2 && video.videoWidth && now - last >= 1000 / FPS - 2) {
@@ -276,15 +281,64 @@ function pinitVideo(sid, start) {
     }
     if (now - statAt >= 2000) {
       // shown as the toolbar tooltip so the real frame rate can be read off
-      port.postMessage({ type: "video-stat", fps: Math.round((statFrames * 1000) / (now - statAt)) });
+      port.postMessage({
+        type: "video-stat",
+        fps: Math.round((statFrames * 1000) / (now - statAt)) + " (" + tickerKind + ", " + document.visibilityState + ")",
+      });
       statFrames = 0;
       statAt = now;
     }
     // requestVideoFrameCallback never fires while paused: poll instead so a pause is noticed
     // (frames, seeks, resume, window close).
-    if (video.paused) setTimeout(step, 150);
-    else if (typeof video.requestVideoFrameCallback === "function") video.requestVideoFrameCallback(step);
-    else requestAnimationFrame(step);
+    // Chrome stops rVFC/rAF while the window is fully covered by another window (native
+    // occlusion). The worker ticker below takes over then (see `tick`); whichever fires first
+    // runs the next step, the other is ignored (generation counter).
+    const gen = ++scheduled;
+    const next = () => {
+      if (gen === scheduled) step();
+    };
+    if (!video.paused) {
+      if (typeof video.requestVideoFrameCallback === "function") video.requestVideoFrameCallback(next);
+      else requestAnimationFrame(next);
+    }
+  };
+  let scheduled = 0;
+
+  // Page timers of a hidden/occluded page get throttled harder the longer it stays hidden
+  // (1/s, then once a minute), so the frame rate decays. A Worker's timers are not throttled:
+  // it only posts ticks, and message events are delivered at full speed.
+  const tick = () => {
+    if (stopped) return;
+    const gap = video.paused ? 150 : 1000 / 30; // playing: ~30fps when rVFC/rAF are not firing
+    if (performance.now() - lastStep >= gap) step();
+  };
+  let ticker = null;
+  let tickerKind = "worker";
+  const timerTicker = () => {
+    tickerKind = "timer";
+    const id = setInterval(tick, 16);
+    return { terminate: () => clearInterval(id) };
+  };
+  try {
+    const url = URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 16);"], { type: "text/javascript" }));
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    worker.onmessage = tick;
+    // a blob worker blocked by the page's CSP fails asynchronously, not by throwing
+    worker.onerror = () => {
+      worker.terminate();
+      if (!stopped) ticker = timerTicker();
+    };
+    ticker = worker;
+  } catch (_) {
+    ticker = timerTicker();
+  }
+  const baseStop = stop;
+  stop = () => {
+    try {
+      ticker.terminate();
+    } catch (_) {}
+    baseStop();
   };
   step();
   return true;

@@ -12,7 +12,22 @@ pub enum ImageRef {
     Bytes { data: Arc<[u8]>, mime: String },
 }
 
+/// Video files PinIt plays itself (what WebView2 decodes without extra codecs).
+pub const VIDEO_EXTS: [&str; 5] = ["mp4", "webm", "m4v", "mov", "ogv"];
+
+pub fn is_video_path(p: &std::path::Path) -> bool {
+    p.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| VIDEO_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+}
+
 impl ImageRef {
+    /// A local video may be opened in several windows at once (e.g. to compare positions);
+    /// every other image is opened once and a repeat request just finds the existing window.
+    pub fn allows_duplicates(&self) -> bool {
+        matches!(self, ImageRef::File(p) if is_video_path(p))
+    }
+
     /// Stable identity used to avoid opening the same image twice.
     pub fn key(&self) -> String {
         match self {
