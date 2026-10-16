@@ -5,7 +5,7 @@ import {
 } from "./transform.ts";
 import type { ViewStore } from "./ViewStore.ts";
 
-/** Wheel zoom, Alt+wheel and R+drag free rotation, Space/middle-drag pan, native window drag. */
+/** Wheel zoom, R+drag free rotation, Space/middle-drag pan, native window drag. */
 export class PointerController {
   private panning = false;
   private rotating = false;
@@ -63,12 +63,6 @@ export class PointerController {
 
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    if (e.altKey) {
-      const step = e.shiftKey ? 15 : 1;
-      const dir = e.deltaY < 0 ? 1 : -1;
-      this.store.update((v) => ({ ...v, fine_angle_deg: normalizeAngle(v.fine_angle_deg + dir * step) }));
-      return;
-    }
     const factor = Math.exp(-e.deltaY / 400);
     const box = this.stage.windowBox();
     const c = { x: e.offsetX - box.w / 2, y: e.offsetY - box.h / 2 };

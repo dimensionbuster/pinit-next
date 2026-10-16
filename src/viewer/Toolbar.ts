@@ -39,7 +39,7 @@ export class Toolbar {
 
     const chip = h("button", {
       class: "angle-chip",
-      title: "자유 회전 초기화 (R+드래그 또는 Alt+휠로 조절)",
+      title: "자유 회전 초기화 (R을 누른 채 끌어서 조절)",
       hidden: true,
       onClick: () => store.update((v) => ({ ...v, fine_angle_deg: 0 })),
     });
