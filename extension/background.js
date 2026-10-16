@@ -90,8 +90,11 @@ async function startVideo(tab, frameId) {
   if (!best) return fail("재생 중인 영상을 찾지 못했습니다");
 
   const sid = crypto.randomUUID();
+  // Needs the click's user gesture, so it comes before anything slow. Failure is not fatal:
+  // the stream just stops while the window is covered, as before.
+  const holding = await holdTabVisible(sid, tab.id);
   const native = chrome.runtime.connectNative(HOST);
-  streams.set(sid, { native, tabId: tab.id, frameId: best.frameId, framePort: null, started: false });
+  streams.set(sid, { native, tabId: tab.id, frameId: best.frameId, framePort: null, started: false, holding });
   native.onMessage.addListener((m) => onNativeMessage(sid, m));
   native.onDisconnect.addListener(() => {
     const err = chrome.runtime.lastError;
@@ -126,10 +129,37 @@ function onNativeMessage(sid, m) {
   }
 }
 
+/**
+ * Chrome stops rendering a tab whose window is fully covered by another window, and the video
+ * freezes. A tab being captured counts as visible, so keep a (video-only, unread) tab capture
+ * open in an offscreen document while the stream runs.
+ */
+async function holdTabVisible(sid, tabId) {
+  try {
+    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+    if ((await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] })).length === 0) {
+      await chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: ["USER_MEDIA"],
+        justification: "Keep the tab rendering while its window is covered, so the pinned video keeps moving",
+      });
+    }
+    const r = await chrome.runtime.sendMessage({ target: "pinit-offscreen", type: "hold-start", sid, streamId });
+    return !!(r && r.ok);
+  } catch (_) {
+    return false;
+  }
+}
+
+function releaseTab(sid) {
+  chrome.runtime.sendMessage({ target: "pinit-offscreen", type: "hold-stop", sid }).catch(() => {});
+}
+
 function endStream(sid) {
   const s = streams.get(sid);
   if (!s) return;
   streams.delete(sid);
+  if (s.holding) releaseTab(sid);
   try {
     if (s.framePort) {
       s.framePort.postMessage({ stop: true });

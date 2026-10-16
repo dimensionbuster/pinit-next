@@ -8,7 +8,9 @@
     "activeTab",
     "contextMenus",
     "nativeMessaging",
-    "scripting"
+    "offscreen",
+    "scripting",
+    "tabCapture"
   ],
   "background": {
     "service_worker": "background.js"
