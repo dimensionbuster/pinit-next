@@ -86,27 +86,25 @@ test("rotateAboutCenter turns the picture about the window centre", () => {
   near(a.y, b.x * Math.sin(r) + b.y * Math.cos(r));
 });
 
-test("anchorOnResize keeps on-screen scale and picture centre for every grip, rotated or not", () => {
+test("anchorOnResize keeps the picture fixed on screen for every dragged edge", () => {
+  const v = { ...defaultView(), zoom: 1.5, pan_x: 12, pan_y: -8, quarter_turns: 1, fine_angle_deg: 25 };
   const nat = { w: 800, h: 600 };
-  const views = [
-    { ...defaultView(), zoom: 1.5, pan_x: 12, pan_y: -8 },
-    { ...defaultView(), zoom: 0.7, pan_x: -40, pan_y: 25, quarter_turns: 1, fine_angle_deg: 30, flip_h: true },
-  ];
-  for (const v of views) {
-    for (const west of [true, false]) {
-      for (const north of [true, false]) {
-        const from = { w: 400, h: 300 };
-        const to = { w: 650, h: 220 };
-        // window origin on screen; the edge opposite the dragged one stays put
-        const o0 = { x: 1000, y: 500 };
-        const o1 = { x: west ? o0.x + from.w - to.w : o0.x, y: north ? o0.y + from.h - to.h : o0.y };
-        const fit0 = fitScale(from, v.quarter_turns, nat);
-        const fit1 = fitScale(to, v.quarter_turns, nat);
-        const out = anchorOnResize(v, from, to, fit0, fit1, { west, north });
-        near(fit1 * out.zoom, fit0 * v.zoom);
-        near(o1.x + to.w / 2 + out.pan_x, o0.x + from.w / 2 + v.pan_x);
-        near(o1.y + to.h / 2 + out.pan_y, o0.y + from.h / 2 + v.pan_y);
-      }
+  const win0 = { w: 400, h: 300 };
+  const screen0 = { x: 1000, y: 500 }; // window top-left on screen
+  for (const [west, north] of [[false, false], [true, false], [false, true], [true, true]]) {
+    for (const win1 of [{ w: 700, h: 450 }, { w: 250, h: 120 }]) {
+      // west/north drags move the window origin so the opposite edges stay put
+      const screen1 = {
+        x: screen0.x + (west ? win0.w - win1.w : 0),
+        y: screen0.y + (north ? win0.h - win1.h : 0),
+      };
+      const fit0 = fitScale(win0, v.quarter_turns, nat);
+      const fit1 = fitScale(win1, v.quarter_turns, nat);
+      const out = anchorOnResize(v, fit0, win0, fit1, win1, { west, north });
+      near(fit1 * out.zoom, fit0 * v.zoom); // same on-screen scale
+      // picture centre on screen = window origin + window centre + pan
+      near(screen1.x + win1.w / 2 + out.pan_x, screen0.x + win0.w / 2 + v.pan_x);
+      near(screen1.y + win1.h / 2 + out.pan_y, screen0.y + win0.h / 2 + v.pan_y);
     }
   }
 });
