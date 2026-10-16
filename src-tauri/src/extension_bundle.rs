@@ -4,9 +4,11 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-const FILES: [(&str, &[u8]); 5] = [
+const FILES: [(&str, &[u8]); 7] = [
     ("manifest.json", include_bytes!("../../extension/manifest.json")),
     ("background.js", include_bytes!("../../extension/background.js")),
+    ("offscreen.html", include_bytes!("../../extension/offscreen.html")),
+    ("offscreen.js", include_bytes!("../../extension/offscreen.js")),
     ("icons/icon16.png", include_bytes!("../../extension/icons/icon16.png")),
     ("icons/icon48.png", include_bytes!("../../extension/icons/icon48.png")),
     ("icons/icon128.png", include_bytes!("../../extension/icons/icon128.png")),
