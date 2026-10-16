@@ -117,8 +117,10 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
             if let (Ok(p), Ok(s)) = (window.outer_position(), window.outer_size()) {
                 state.send(Msg::Bounds(id, Rect::new(p.x, p.y, s.width as i32, s.height as i32)));
             }
+            anchor::on_geometry(window);
         }
         WindowEvent::Destroyed => {
+            anchor::detach(label);
             // On app exit keep the layout; only a user close forgets the window.
             if !state.quitting.load(Ordering::SeqCst) {
                 state.send(Msg::Closed(id));
