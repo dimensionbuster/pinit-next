@@ -90,8 +90,11 @@ async function startVideo(tab, frameId) {
   if (!best) return fail("재생 중인 영상을 찾지 못했습니다");
 
   const sid = crypto.randomUUID();
+  // Needs the click's user gesture, so it comes before anything slow. Failure is not fatal:
+  // the stream just stops while the window is covered, as before.
+  const holding = await holdTabVisible(sid, tab.id);
   const native = chrome.runtime.connectNative(HOST);
-  streams.set(sid, { native, tabId: tab.id, frameId: best.frameId, framePort: null, started: false });
+  streams.set(sid, { native, tabId: tab.id, frameId: best.frameId, framePort: null, started: false, holding });
   native.onMessage.addListener((m) => onNativeMessage(sid, m));
   native.onDisconnect.addListener(() => {
     const err = chrome.runtime.lastError;
@@ -126,10 +129,37 @@ function onNativeMessage(sid, m) {
   }
 }
 
+/**
+ * Chrome stops rendering a tab whose window is fully covered by another window, and the video
+ * freezes. A tab being captured counts as visible, so keep a (video-only, unread) tab capture
+ * open in an offscreen document while the stream runs.
+ */
+async function holdTabVisible(sid, tabId) {
+  try {
+    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
+    if ((await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] })).length === 0) {
+      await chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: ["USER_MEDIA"],
+        justification: "Keep the tab rendering while its window is covered, so the pinned video keeps moving",
+      });
+    }
+    const r = await chrome.runtime.sendMessage({ target: "pinit-offscreen", type: "hold-start", sid, streamId });
+    return !!(r && r.ok);
+  } catch (_) {
+    return false;
+  }
+}
+
+function releaseTab(sid) {
+  chrome.runtime.sendMessage({ target: "pinit-offscreen", type: "hold-stop", sid }).catch(() => {});
+}
+
 function endStream(sid) {
   const s = streams.get(sid);
   if (!s) return;
   streams.delete(sid);
+  if (s.holding) releaseTab(sid);
   try {
     if (s.framePort) {
       s.framePort.postMessage({ stop: true });
@@ -202,7 +232,8 @@ function pinitVideo(sid, start) {
   let sentTime = -1;
   let statFrames = 0;
   let statAt = performance.now();
-  const stop = () => {
+  let lastStep = 0; // when step() last ran, by any trigger
+  let stop = () => {
     if (stopped) return;
     stopped = true;
     try {
@@ -214,7 +245,10 @@ function pinitVideo(sid, start) {
     if (m && m.stop) stop();
     else if (m && m.size) shown = m.size;
   });
-  port.onDisconnect.addListener(() => (stopped = true));
+  port.onDisconnect.addListener(() => {
+    stop();
+    stopped = true;
+  });
 
   const toBase64 = (blob) =>
     new Promise((resolve, reject) => {
@@ -232,6 +266,7 @@ function pinitVideo(sid, start) {
       return;
     }
     const now = performance.now();
+    lastStep = now;
     // A paused video still gets its current frame shown (once, and again after a seek).
     const fresh = !video.paused || sentTime !== video.currentTime;
     if (inflight < MAX_INFLIGHT && fresh && video.readyState >= 2 && video.videoWidth && now - last >= 1000 / FPS - 2) {
@@ -276,15 +311,67 @@ function pinitVideo(sid, start) {
     }
     if (now - statAt >= 2000) {
       // shown as the toolbar tooltip so the real frame rate can be read off
-      port.postMessage({ type: "video-stat", fps: Math.round((statFrames * 1000) / (now - statAt)) });
+      port.postMessage({
+        type: "video-stat",
+        fps: Math.round((statFrames * 1000) / (now - statAt)) + " (" + tickerKind + ", " + document.visibilityState + ")",
+      });
       statFrames = 0;
       statAt = now;
     }
     // requestVideoFrameCallback never fires while paused: poll instead so a pause is noticed
     // (frames, seeks, resume, window close).
-    if (video.paused) setTimeout(step, 150);
-    else if (typeof video.requestVideoFrameCallback === "function") video.requestVideoFrameCallback(step);
-    else requestAnimationFrame(step);
+    // Chrome stops rVFC/rAF while the window is fully covered by another window (native
+    // occlusion). The worker ticker below takes over then (see `tick`); steps are rate-limited
+    // by `last`, so both triggers running is harmless.
+    // At most one callback is pending: while occluded it never fires, and the ticker would
+    // otherwise pile up a new one on every step.
+    if (!video.paused && !waiting) {
+      waiting = true;
+      const next = () => {
+        waiting = false;
+        step();
+      };
+      if (typeof video.requestVideoFrameCallback === "function") video.requestVideoFrameCallback(next);
+      else requestAnimationFrame(next);
+    }
+  };
+  let waiting = false;
+
+  // Page timers of a hidden/occluded page get throttled harder the longer it stays hidden
+  // (1/s, then once a minute), so the frame rate decays. A Worker's timers are not throttled:
+  // it only posts ticks, and message events are delivered at full speed.
+  const tick = () => {
+    if (stopped) return;
+    const gap = video.paused ? 150 : 1000 / 30; // playing: ~30fps when rVFC/rAF are not firing
+    if (performance.now() - lastStep >= gap) step();
+  };
+  let ticker = null;
+  let tickerKind = "worker";
+  const timerTicker = () => {
+    tickerKind = "timer";
+    const id = setInterval(tick, 16);
+    return { terminate: () => clearInterval(id) };
+  };
+  try {
+    const url = URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 16);"], { type: "text/javascript" }));
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    worker.onmessage = tick;
+    // a blob worker blocked by the page's CSP fails asynchronously, not by throwing
+    worker.onerror = () => {
+      worker.terminate();
+      if (!stopped) ticker = timerTicker();
+    };
+    ticker = worker;
+  } catch (_) {
+    ticker = timerTicker();
+  }
+  const baseStop = stop;
+  stop = () => {
+    try {
+      ticker.terminate();
+    } catch (_) {}
+    baseStop();
   };
   step();
   return true;

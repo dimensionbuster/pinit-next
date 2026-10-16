@@ -16,14 +16,7 @@ pub fn is_image_path(p: &std::path::Path) -> bool {
         .is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
-/// Video files PinIt plays itself (what WebView2 decodes without extra codecs).
-pub const VIDEO_EXTS: [&str; 5] = ["mp4", "webm", "m4v", "mov", "ogv"];
-
-pub fn is_video_path(p: &std::path::Path) -> bool {
-    p.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| VIDEO_EXTS.contains(&e.to_ascii_lowercase().as_str()))
-}
+pub use pinit_core::image_ref::{is_video_path, VIDEO_EXTS};
 
 pub fn has_flag(args: &[String], flag: &str) -> bool {
     args.iter().any(|a| a == flag)

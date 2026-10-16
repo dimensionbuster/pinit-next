@@ -31,9 +31,12 @@ pub fn register(exe: &Path) {
             .chain(crate::cli::VIDEO_EXTS.iter().map(|e| format!(".{e}")));
         for class in classes {
             let key = verb_key(&class);
-            let entries: [(String, Option<&str>, String); 3] = [
+            // Document: each selected file starts its own launch (media types default to
+            // "Player", which hands over one file only), so several videos open at once.
+            let entries: [(String, Option<&str>, String); 4] = [
                 (key.clone(), None, LABEL.to_string()),
                 (key.clone(), Some("Icon"), icon.clone()),
+                (key.clone(), Some("MultiSelectModel"), "Document".to_string()),
                 (format!(r"{key}\command"), None, command.clone()),
             ];
             for (k, name, data) in entries {

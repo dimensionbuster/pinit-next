@@ -142,6 +142,9 @@ impl OpenService {
 
     /// Window already showing this image, if any (cheap; call before resolving).
     pub fn find_open(&self, image: &ImageRef) -> Option<WindowId> {
+        if image.allows_duplicates() {
+            return None;
+        }
         let key = image.key();
         self.windows.iter().find(|e| e.key == key).map(|e| e.id)
     }
