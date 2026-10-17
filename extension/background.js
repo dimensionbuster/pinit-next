@@ -366,11 +366,15 @@ function pinitVideo(sid, start) {
   } catch (_) {
     ticker = timerTicker();
   }
+  // Repeat the video while it is pinned (the page's own loop setting is put back on stop).
+  const wasLooping = video.loop;
+  video.loop = true;
   const baseStop = stop;
   stop = () => {
     try {
       ticker.terminate();
     } catch (_) {}
+    video.loop = wasLooping;
     baseStop();
   };
   step();
