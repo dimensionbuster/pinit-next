@@ -106,7 +106,7 @@ pub fn run(first: &Value) -> i32 {
     while let Ok(Some(bytes)) = read_frame(&mut stdin) {
         let Ok(msg) = serde_json::from_slice::<Value>(&bytes) else { continue };
         let kind = msg.get("type").and_then(Value::as_str);
-        let wanted = matches!(kind, Some("video-frame" | "video-stop"));
+        let wanted = matches!(kind, Some("video-frame" | "video-attach" | "video-stop"));
         if !wanted || msg.get("sid").and_then(Value::as_str) != Some(sid.as_str()) {
             continue;
         }

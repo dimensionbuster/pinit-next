@@ -89,6 +89,16 @@ async function startVideo(tab, frameId) {
   }
   if (!best) return fail("재생 중인 영상을 찾지 못했습니다");
 
+  // This video is already being captured: one more window onto the same capture, no second
+  // capture/encode (that is what made several windows of one video slow).
+  const live = best.result.sid;
+  if (live && streams.has(live)) {
+    const s = streams.get(live);
+    s.native.postMessage({ v: 1, sid: live, type: "video-attach" });
+    if (s.framePort) s.framePort.postMessage({ refresh: true }); // a paused video resends its frame
+    return;
+  }
+
   const sid = crypto.randomUUID();
   // Needs the click's user gesture, so it comes before anything slow. Failure is not fatal:
   // the stream just stops while the window is covered, as before.
@@ -212,7 +222,7 @@ function pinitVideo(sid, start) {
     }
   }
   if (!best) return null;
-  if (!start) return { area: bestScore };
+  if (!start) return { area: bestScore, sid: best.__pinitSid || "" }; // sid: already being captured
 
   const MAX_W = 1920; // until the app reports the window size
   const FPS = 60;
@@ -244,6 +254,7 @@ function pinitVideo(sid, start) {
   port.onMessage.addListener((m) => {
     if (m && m.stop) stop();
     else if (m && m.size) shown = m.size;
+    else if (m && m.refresh) sentTime = -1; // a new window needs the current frame, even if paused
   });
   port.onDisconnect.addListener(() => {
     stop();
@@ -369,12 +380,14 @@ function pinitVideo(sid, start) {
   // Repeat the video while it is pinned (the page's own loop setting is put back on stop).
   const wasLooping = video.loop;
   video.loop = true;
+  video.__pinitSid = sid; // marks the video as captured, so a second click attaches a window
   const baseStop = stop;
   stop = () => {
     try {
       ticker.terminate();
     } catch (_) {}
     video.loop = wasLooping;
+    delete video.__pinitSid;
     baseStop();
   };
   step();
