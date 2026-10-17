@@ -2,6 +2,14 @@
 resolver = "2"
 members = ["crates/pinit-core", "src-tauri"]
 
+# `npm run dev:app` runs a debug build. Unoptimised serde/base64/event code made the video bridge
+# burn two cores, so dependencies are optimised and our own code lightly (debug info stays).
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
 codegen-units = 1
 lto = true

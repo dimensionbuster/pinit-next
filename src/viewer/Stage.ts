@@ -100,17 +100,17 @@ export class Stage {
     const canvas = this.canvas;
     if (!canvas) return;
     try {
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
-      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
+      // The browser decodes the base64 and the JPEG itself, off the script thread (a JS loop over
+      // ~200 KB per frame, per window, was the cost).
+      const img = new Image();
+      img.src = `data:image/jpeg;base64,${b64}`;
+      await img.decode();
+      if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
         this.render();
       }
-      canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
-      bitmap.close();
+      canvas.getContext("2d")?.drawImage(img, 0, 0);
     } catch {
       // a corrupt frame is skipped; the next one repaints
     }

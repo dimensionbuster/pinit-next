@@ -89,6 +89,16 @@ async function startVideo(tab, frameId) {
   }
   if (!best) return fail("재생 중인 영상을 찾지 못했습니다");
 
+  // This video is already being captured: one more window onto the same capture, no second
+  // capture/encode (that is what made several windows of one video slow).
+  const live = best.result.sid;
+  if (live && streams.has(live)) {
+    const s = streams.get(live);
+    s.native.postMessage({ v: 1, sid: live, type: "video-attach" });
+    if (s.framePort) s.framePort.postMessage({ refresh: true }); // a paused video resends its frame
+    return;
+  }
+
   const sid = crypto.randomUUID();
   // Needs the click's user gesture, so it comes before anything slow. Failure is not fatal:
   // the stream just stops while the window is covered, as before.
@@ -212,19 +222,32 @@ function pinitVideo(sid, start) {
     }
   }
   if (!best) return null;
-  if (!start) return { area: bestScore };
+  if (!start) return { area: bestScore, sid: best.__pinitSid || "" }; // sid: already being captured
 
   const MAX_W = 1920; // until the app reports the window size
   const FPS = 60;
   const QUALITY = 0.85;
-  const MAX_INFLIGHT = 2; // frames being encoded/serialised at once (pipelining)
+  // Frames being encoded/serialised at once (pipelining). The ceiling on frames per second is
+  // inflight / (time one frame needs to get through), so 2 capped a ~48ms path at ~42 fps.
+  // More in flight only helps while the pipeline is waiting; once the CPU is the limit they just
+  // queue up and add delay. So many are allowed, but no new frame starts while the oldest one has
+  // been in the pipeline longer than MAX_PIPELINE_MS.
+  const MAX_INFLIGHT = 8;
+  const MAX_PIPELINE_MS = 120;
+  const canvasCount = MAX_INFLIGHT;
   const video = best;
   const port = chrome.runtime.connect({ name: "pinit-video:" + sid });
-  // Two canvases so the next frame can be drawn while the previous one is still encoding.
-  const canvases = [document.createElement("canvas"), document.createElement("canvas")];
+  // One canvas per frame in flight, so the next frame can be drawn while earlier ones are encoding.
+  const canvases = Array.from({ length: canvasCount }, () => document.createElement("canvas"));
   const ctxs = canvases.map((c) => c.getContext("2d"));
   let stopped = false;
   let inflight = 0;
+  const inflightSince = new Map(); // frame number -> when it entered the pipeline (oldest first)
+  let stepCount = 0; // diagnostics for the tooltip
+  let blockedCap = 0;
+  let blockedGuard = 0;
+  let pipeMs = 0;
+  let pipeN = 0;
   let slot = 0;
   let seq = 0; // frames are numbered; a result older than the last one sent is dropped
   let sentSeq = 0;
@@ -244,6 +267,7 @@ function pinitVideo(sid, start) {
   port.onMessage.addListener((m) => {
     if (m && m.stop) stop();
     else if (m && m.size) shown = m.size;
+    else if (m && m.refresh) sentTime = -1; // a new window needs the current frame, even if paused
   });
   port.onDisconnect.addListener(() => {
     stop();
@@ -269,7 +293,14 @@ function pinitVideo(sid, start) {
     lastStep = now;
     // A paused video still gets its current frame shown (once, and again after a seek).
     const fresh = !video.paused || sentTime !== video.currentTime;
-    if (inflight < MAX_INFLIGHT && fresh && video.readyState >= 2 && video.videoWidth && now - last >= 1000 / FPS - 2) {
+    const oldest = inflightSince.size > 0 ? now - inflightSince.values().next().value : 0;
+    // what limits the frame rate, counted for the toolbar tooltip
+    stepCount++;
+    if (fresh && now - last >= 1000 / FPS - 2) {
+      if (inflight >= MAX_INFLIGHT) blockedCap++;
+      else if (oldest >= MAX_PIPELINE_MS) blockedGuard++;
+    }
+    if (inflight < MAX_INFLIGHT && oldest < MAX_PIPELINE_MS && fresh && video.readyState >= 2 && video.videoWidth && now - last >= 1000 / FPS - 2) {
       last = now;
       sentTime = video.currentTime;
       // native resolution is the ceiling; the shown window size is the target (never below 320px wide)
@@ -279,7 +310,7 @@ function pinitVideo(sid, start) {
       const h = Math.round(video.videoHeight * scale);
       const canvas = canvases[slot];
       const ctx = ctxs[slot];
-      slot ^= 1;
+      slot = (slot + 1) % canvases.length;
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -293,6 +324,7 @@ function pinitVideo(sid, start) {
       }
       const mine = ++seq;
       inflight++;
+      inflightSince.set(mine, now);
       new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", QUALITY))
         .then((blob) => (blob ? toBase64(blob) : null))
         .then((b64) => {
@@ -307,14 +339,25 @@ function pinitVideo(sid, start) {
           port.postMessage({ type: "video-error", error: "이 영상은 캡처할 수 없습니다 (" + ((e && e.name) || e) + ")" });
           stop();
         })
-        .finally(() => inflight--);
+        .finally(() => {
+          inflight--;
+          inflightSince.delete(mine);
+          pipeMs += performance.now() - now;
+          pipeN++;
+        });
     }
     if (now - statAt >= 2000) {
       // shown as the toolbar tooltip so the real frame rate can be read off
+      const perSec = (n) => Math.round((n * 1000) / (now - statAt));
       port.postMessage({
         type: "video-stat",
-        fps: Math.round((statFrames * 1000) / (now - statAt)) + " (" + tickerKind + ", " + document.visibilityState + ")",
+        fps:
+          perSec(statFrames) +
+          " (" + tickerKind + ", " + document.visibilityState + ")" +
+          ` steps/s=${perSec(stepCount)} blocked: cap=${perSec(blockedCap)} guard=${perSec(blockedGuard)}` +
+          ` pipeline=${pipeN ? Math.round(pipeMs / pipeN) : 0}ms`,
       });
+      stepCount = blockedCap = blockedGuard = pipeMs = pipeN = 0;
       statFrames = 0;
       statAt = now;
     }
@@ -366,11 +409,17 @@ function pinitVideo(sid, start) {
   } catch (_) {
     ticker = timerTicker();
   }
+  // Repeat the video while it is pinned (the page's own loop setting is put back on stop).
+  const wasLooping = video.loop;
+  video.loop = true;
+  video.__pinitSid = sid; // marks the video as captured, so a second click attaches a window
   const baseStop = stop;
   stop = () => {
     try {
       ticker.terminate();
     } catch (_) {}
+    video.loop = wasLooping;
+    delete video.__pinitSid;
     baseStop();
   };
   step();
