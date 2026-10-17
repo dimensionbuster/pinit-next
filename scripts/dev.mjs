@@ -1,6 +1,6 @@
 // `npm run dev:app`: refresh the dev extension, then start the isolated debug app with hot reload.
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,17 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 
 const gen = spawnSync(process.execPath, ["scripts/dev-extension.mjs"], { cwd: root, stdio: "inherit" });
 if (gen.status !== 0) process.exit(gen.status ?? 1);
+
+// Edits under extension/ regenerate extension-dev/ while dev:app runs; the dev copy sees its new
+// build stamp and reloads itself, so extension changes need no restart either.
+let regen = null;
+watch(join(root, "extension"), { recursive: true }, () => {
+  clearTimeout(regen);
+  regen = setTimeout(() => {
+    const r = spawnSync(process.execPath, ["scripts/dev-extension.mjs"], { cwd: root, stdio: "inherit" });
+    if (r.status !== 0) console.error("extension-dev/ could not be regenerated (see above)");
+  }, 300);
+});
 
 // Port: `npm run dev:app -- --port 1430` or PINIT_DEV_PORT=1430 (default 1420). Lets two checkouts/runs coexist.
 const flag = process.argv.indexOf("--port");
