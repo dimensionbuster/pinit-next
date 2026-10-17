@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use pinit_core::image_ref::ImageRef;
 use pinit_core::image_size::image_size;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, EventTarget, Manager};
 
 use crate::adapters::tauri_host::label_for;
 use crate::app::AppState;
@@ -63,6 +63,23 @@ pub fn valid_sid(sid: &str) -> bool {
 
 fn is_base64(s: &str) -> bool {
     s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'-' | b'_'))
+}
+
+/// The fields of a host line that matter here, borrowed from the line (see `read_stream`).
+#[derive(serde::Deserialize)]
+struct Line<'a> {
+    sid: Option<&'a str>,
+    #[serde(rename = "type")]
+    kind: Option<&'a str>,
+    jpeg_b64: Option<&'a str>,
+}
+
+/// The window label an event target names, if any.
+fn target_label(t: &EventTarget) -> Option<&str> {
+    match t {
+        EventTarget::Window { label } | EventTarget::Webview { label } | EventTarget::WebviewWindow { label } => Some(label),
+        _ => None,
+    }
 }
 
 /// First line a host connection sends: names the stream.
@@ -200,18 +217,19 @@ fn read_stream(app: &AppHandle, inbox: &Path, pipe: &File, st: &Stream) -> io::R
         if !read_line(&mut reader, &mut line, MAX_LINE)? {
             return Ok(());
         }
-        let Ok(msg) = serde_json::from_str::<Value>(line.trim()) else { continue };
-        if msg.get("sid").and_then(Value::as_str) != Some(sid.as_str()) {
+        // Borrowed fields only: a frame line is hundreds of KB and arrives dozens of times a second.
+        let Ok(msg) = serde_json::from_str::<Line>(line.trim()) else { continue };
+        if msg.sid != Some(sid.as_str()) {
             continue;
         }
-        match msg.get("type").and_then(Value::as_str) {
+        match msg.kind {
             Some("video-stop") => return Ok(()),
             // Another window onto the same capture: it opens with the next frame.
             Some("video-attach") => {
                 st.attach_pending.fetch_add(1, Ordering::SeqCst);
             }
             Some("video-frame") => {
-                let Some(b64_data) = msg.get("jpeg_b64").and_then(Value::as_str) else { continue };
+                let Some(b64_data) = msg.jpeg_b64 else { continue };
                 if !is_base64(b64_data) {
                     continue;
                 }
@@ -228,10 +246,11 @@ fn read_stream(app: &AppHandle, inbox: &Path, pipe: &File, st: &Stream) -> io::R
                     with_streams(|m| m.entry(sid.clone()).or_default().push(l.clone()));
                     st.labels.lock().unwrap().push(l);
                 }
+                // serialised once for all windows of the stream (not once per window)
                 let labels = st.labels.lock().unwrap().clone();
-                for l in labels {
-                    let _ = app.emit_to(l, "video-frame", b64_data);
-                }
+                let _ = app.emit_filter("video-frame", b64_data, |t| {
+                    target_label(t).is_some_and(|l| labels.iter().any(|x| x == l))
+                });
             }
             _ => {}
         }
