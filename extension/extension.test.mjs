@@ -51,7 +51,9 @@ test("generated dev extension: own ID and host, same permissions, no leftovers",
   const m = JSON.parse(readFileSync(join(out, "manifest.json"), "utf8"));
   const bg = readFileSync(join(out, "background.js"), "utf8");
   assert.equal(idFromKey(m.key), dev.id);
-  assert.deepEqual(m.permissions, manifest.permissions);
+  // same permissions plus `alarms`, which only the dev copy's auto reload uses
+  assert.deepEqual([...m.permissions].sort(), [...manifest.permissions, "alarms"].sort());
+  assert.ok(readFileSync(join(out, "dev-build.txt"), "utf8").length > 0);
   assert.match(bg, new RegExp(`HOST = "${DEV_HOST}"`));
   assert.ok(!bg.includes(`HOST = "${PROD_HOST}"`));
   assert.ok(bg.includes("PinIt DEV로 열기"));
