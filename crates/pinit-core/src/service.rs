@@ -97,6 +97,11 @@ struct Entry {
     user_sized: bool,
     view: ViewState,
     natural_aspect: f64,
+    /// A video whose real size the viewer has not reported yet (the aspect is a 16:9 placeholder).
+    /// Window-creation resizes in this phase are the OS settling, not the user.
+    awaiting_size: bool,
+    /// Placed by the frontier strategy (not restored from a session).
+    fresh_placed: bool,
 }
 
 /// Slack for the OS rounding a size the service asked for (DPI, min size).
@@ -217,6 +222,8 @@ impl OpenService {
             user_sized,
             view,
             natural_aspect,
+            awaiting_size: !user_sized && resolved.image.allows_duplicates(),
+            fresh_placed: restore.is_none(),
         });
         Ok(OpenOutcome::Opened(id))
     }
@@ -230,8 +237,9 @@ impl OpenService {
     pub fn on_bounds_changed(&mut self, id: WindowId, bounds: Rect) {
         let displays = self.displays.displays();
         if let Some(e) = self.windows.iter_mut().find(|e| e.id == id) {
-            if (bounds.w - e.last_fit.w).abs() > SIZE_TOLERANCE
-                || (bounds.h - e.last_fit.h).abs() > SIZE_TOLERANCE
+            if !e.awaiting_size
+                && ((bounds.w - e.last_fit.w).abs() > SIZE_TOLERANCE
+                    || (bounds.h - e.last_fit.h).abs() > SIZE_TOLERANCE)
             {
                 e.user_sized = true;
             }
@@ -274,12 +282,34 @@ impl OpenService {
             return None;
         }
         let displays = self.displays.displays();
-        let e = self.windows.iter_mut().find(|e| e.id == id)?;
+        let idx = self.windows.iter().position(|e| e.id == id)?;
+        let obstacles: Vec<Rect> = self
+            .windows
+            .iter()
+            .filter(|o| o.id != id && o.display_id == self.windows[idx].display_id)
+            .map(|o| o.bounds)
+            .collect();
+        let e = &mut self.windows[idx];
         e.natural_aspect = width as f64 / height as f64;
+        let first = std::mem::take(&mut e.awaiting_size);
         let b = e.bounds;
         let aspect = e.aspect();
         if e.user_sized || ((b.w as f64 / b.h as f64) - aspect).abs() * (b.h as f64) < 1.5 {
             return None;
+        }
+        // Opened on the 16:9 placeholder at a frontier slot: place it again with the real aspect
+        // so it sits flush against its neighbours instead of shrinking around its old centre.
+        if first && e.fresh_placed {
+            if let Some(d) = displays.iter().find(|d| d.id == e.display_id) {
+                let p = self.config.strategy(d.scale).place(
+                    &PlacementRequest { existing: &obstacles, area: d.work_area, aspect },
+                    self.rng.as_mut(),
+                );
+                e.bounds = p.rect;
+                e.last_fit = p.rect;
+                self.host.set_bounds(id, p.rect);
+                return Some(p.rect);
+            }
         }
         let area = displays
             .iter()
