@@ -122,7 +122,8 @@ impl ImageResolver for UrlResolver {
             .into();
         let mut req = agent.get(url).header("User-Agent", USER_AGENT).header(
             "Accept",
-            "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            // avif는 빼야 한다: 광고하면 CDN이 AVIF를 주는데 image_size가 읽지 못한다.
+            "image/webp,image/apng,image/*;q=0.8",
         );
         if let Some(r) = referer {
             req = req.header("Referer", r);
