@@ -41,6 +41,29 @@ pub async fn viewer_set_view(window: WebviewWindow, view: ViewJson, state: State
     Ok(())
 }
 
+/// Physical Space / Ctrl state. Key events only reach the focused window, so a
+/// key held while another window had focus is invisible to the page; this asks the OS.
+#[derive(Serialize)]
+pub struct HeldKeys {
+    space: bool,
+    ctrl: bool,
+}
+
+#[tauri::command]
+pub fn held_keys() -> HeldKeys {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL, VK_SPACE};
+        // High bit set = currently down.
+        let down = |vk: u16| unsafe { GetAsyncKeyState(vk as i32) } < 0;
+        HeldKeys { space: down(VK_SPACE), ctrl: down(VK_CONTROL) }
+    }
+    #[cfg(not(windows))]
+    {
+        HeldKeys { space: false, ctrl: false }
+    }
+}
+
 /// Viewer-side diagnostics, printed in the `npm run dev:app` terminal (see `anchor::tracing`).
 #[tauri::command]
 pub fn viewer_log(window: WebviewWindow, msg: String) {

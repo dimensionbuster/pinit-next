@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ipc } from "../ipc.ts";
 import type { Stage } from "./Stage.ts";
 import {
   defaultView, flipScreen, normalizeAngle, rotateAboutCenter, zoomAt,
@@ -9,6 +10,8 @@ import type { ViewStore } from "./ViewStore.ts";
 export class PointerController {
   private panning = false;
   private rotating = false;
+  private zooming = false;
+  private zoomAnchor = { x: 0, y: 0 };
   private spaceDown = false;
   private rKeyDown = false;
   private last = { x: 0, y: 0 };
@@ -24,10 +27,12 @@ export class PointerController {
     el.addEventListener("dblclick", () =>
       store.update((v) => ({ ...v, zoom: 1, pan_x: 0, pan_y: 0 })),
     );
+    // Space held while another window had focus never fires keydown here; ask the OS.
+    el.addEventListener("pointerenter", () => void this.syncKeys());
+    window.addEventListener("focus", () => void this.syncKeys());
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" && !this.spaceDown) {
-        this.spaceDown = true;
-        el.classList.add("pan-mode");
+        this.setSpace(true);
         e.preventDefault();
       } else if (e.code === "KeyR" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         this.rKeyDown = true;
@@ -36,17 +41,31 @@ export class PointerController {
     });
     window.addEventListener("keyup", (e) => {
       if (e.code === "Space") {
-        this.spaceDown = false;
-        el.classList.remove("pan-mode");
+        this.setSpace(false);
       } else if (e.code === "KeyR") {
         this.releaseRotate();
       }
     });
     window.addEventListener("blur", () => {
-      this.spaceDown = false;
-      el.classList.remove("pan-mode");
+      this.setSpace(false);
       this.releaseRotate();
     });
+  }
+
+  private setSpace(on: boolean): void {
+    this.spaceDown = on;
+    this.stage.el.classList.toggle("pan-mode", on);
+  }
+
+  /** Refresh Space/Ctrl from the OS. Returns the physical Ctrl state. */
+  private async syncKeys(): Promise<boolean> {
+    try {
+      const k = await ipc.heldKeys();
+      this.setSpace(k.space);
+      return k.ctrl;
+    } catch {
+      return false;
+    }
   }
 
   private releaseRotate(): void {
@@ -70,25 +89,71 @@ export class PointerController {
   }
 
   private onDown(e: PointerEvent): void {
-    if (this.rKeyDown && e.button === 0) {
-      this.rotating = true;
-      this.lastAngle = this.angleAt(e);
-      this.stage.el.setPointerCapture(e.pointerId);
+    if (!document.hasFocus() && e.button === 0) {
+      // Unfocused: Space/Ctrl state may be stale. Resolve it before deciding what the drag means.
       e.preventDefault();
+      const { pointerId, clientX, clientY, offsetX, offsetY } = e;
+      void this.syncKeys().then((ctrl) => {
+        this.begin(e.button, pointerId, clientX, clientY, offsetX, offsetY, ctrl || e.ctrlKey);
+      });
       return;
     }
-    const pan = e.button === 1 || (e.button === 0 && this.spaceDown);
+    this.begin(e.button, e.pointerId, e.clientX, e.clientY, e.offsetX, e.offsetY, e.ctrlKey, e);
+  }
+
+  private begin(
+    button: number, pointerId: number, cx: number, cy: number, ox: number, oy: number,
+    ctrl: boolean, e?: PointerEvent,
+  ): void {
+    if (this.rKeyDown && button === 0) {
+      this.rotating = true;
+      this.lastAngle = e ? this.angleAt(e) : this.angleFromClient(cx, cy);
+      this.capture(pointerId);
+      e?.preventDefault();
+      return;
+    }
+    if (button === 0 && this.spaceDown && ctrl) {
+      // Photoshop-style Ctrl+Space drag: right = zoom in, left = zoom out, around the press point.
+      const box = this.stage.windowBox();
+      this.zooming = true;
+      this.zoomAnchor = { x: ox - box.w / 2, y: oy - box.h / 2 };
+      this.last = { x: cx, y: cy };
+      this.capture(pointerId);
+      e?.preventDefault();
+      return;
+    }
+    const pan = button === 1 || (button === 0 && this.spaceDown);
     if (pan) {
       this.panning = true;
-      this.last = { x: e.clientX, y: e.clientY };
-      this.stage.el.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    } else if (e.button === 0) {
+      this.last = { x: cx, y: cy };
+      this.capture(pointerId);
+      e?.preventDefault();
+    } else if (button === 0) {
       void getCurrentWindow().startDragging();
     }
   }
 
+  private capture(pointerId: number): void {
+    try {
+      this.stage.el.setPointerCapture(pointerId);
+    } catch {
+      // Pointer already released while keys were being resolved.
+      this.panning = this.rotating = this.zooming = false;
+    }
+  }
+
+  private angleFromClient(x: number, y: number): number {
+    const r = this.stage.el.getBoundingClientRect();
+    return (Math.atan2(y - (r.top + r.height / 2), x - (r.left + r.width / 2)) * 180) / Math.PI;
+  }
+
   private onMove(e: PointerEvent): void {
+    if (this.zooming) {
+      const dx = e.clientX - this.last.x;
+      this.last = { x: e.clientX, y: e.clientY };
+      if (dx !== 0) this.store.update((v) => zoomAt(v, Math.exp(dx / 200), this.zoomAnchor));
+      return;
+    }
     if (this.rotating) {
       const a = this.angleAt(e);
       const d = normalizeAngle(a - this.lastAngle);
@@ -104,9 +169,10 @@ export class PointerController {
   }
 
   private onUp(e: PointerEvent): void {
-    if (!this.panning && !this.rotating) return;
+    if (!this.panning && !this.rotating && !this.zooming) return;
     this.panning = false;
     this.rotating = false;
+    this.zooming = false;
     this.stage.el.releasePointerCapture(e.pointerId);
   }
 }

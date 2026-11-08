@@ -194,6 +194,7 @@ pub fn run() {
             commands::viewer_set_view,
             commands::viewer_pin,
             commands::viewer_log,
+            commands::held_keys,
             commands::viewer_fit,
             commands::viewer_close,
             commands::viewer_open_source,
