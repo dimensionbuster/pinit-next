@@ -89,8 +89,11 @@ export class PointerController {
   }
 
   private onDown(e: PointerEvent): void {
-    if (!document.hasFocus() && e.button === 0) {
-      // Unfocused: Space/Ctrl state may be stale. Resolve it before deciding what the drag means.
+    // A click can activate the window before this event, so hasFocus() alone doesn't mean
+    // spaceDown is current: the sync from the focus handler may still be in flight.
+    const mayBeStale = !document.hasFocus() || (!this.spaceDown && !this.rKeyDown);
+    if (mayBeStale && e.button === 0) {
+      // Resolve the OS key state before deciding what the drag means.
       e.preventDefault();
       const { pointerId, clientX, clientY, offsetX, offsetY } = e;
       void this.syncKeys().then((ctrl) => {
