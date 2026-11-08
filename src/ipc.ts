@@ -67,6 +67,7 @@ export interface UpdateInfo {
 export const ipc = {
   viewerInit: () => invoke<ViewerInit>("viewer_init"),
   viewerSetView: (view: ViewState) => invoke<void>("viewer_set_view", { view }),
+  heldKeys: () => invoke<{ space: boolean; ctrl: boolean }>("held_keys"),
   viewerLog: (msg: string) => invoke<void>("viewer_log", { msg }),
   viewerPin: (pinned: boolean) => invoke<void>("viewer_pin", { pinned }),
   viewerVideoSize: (width: number, height: number) => invoke<void>("viewer_video_size", { width, height }),
