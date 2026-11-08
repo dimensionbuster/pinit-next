@@ -2508,7 +2508,7 @@ version = "0.1.0"
 
 [[package]]
 name = "pinit-next"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "pinit-core",
  "serde",
