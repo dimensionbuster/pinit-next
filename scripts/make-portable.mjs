@@ -1,6 +1,8 @@
 // Builds the standalone exe and assembles a portable folder:
 //   release-portable/PinIt/{PinIt.exe, portable.flag, README.txt}
-// Usage: npm run build:portable
+// Usage: npm run build:portable [-- --with-nsis]
+//   --with-nsis  also emit the NSIS installer from the same compile (target/release/bundle/nsis),
+//                so CI compiles the release profile once instead of twice.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -11,7 +13,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const exe = join(root, "target", "release", "pinit-next.exe");
 const out = join(root, "release-portable", "PinIt");
 
-const build = spawnSync("npx", ["tauri", "build", "--no-bundle"], { cwd: root, stdio: "inherit", shell: true });
+const withNsis = process.argv.includes("--with-nsis");
+const tauriArgs = withNsis ? ["--bundles", "nsis"] : ["--no-bundle"];
+
+const build = spawnSync("npx", ["tauri", "build", ...tauriArgs], { cwd: root, stdio: "inherit", shell: true });
 if (build.status !== 0 || !existsSync(exe)) {
   console.error("build failed", build.error ?? "");
   process.exit(build.status ?? 1);

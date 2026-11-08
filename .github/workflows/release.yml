@@ -45,15 +45,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         if: steps.check_tag.outputs.exists == 'false'
 
-      - name: Build portable
+      # One compile: `--with-nsis` builds the exe + NSIS installer together and the portable
+      # folder reuses that same exe (previously two full release/LTO compiles).
+      - name: Build portable + installer (NSIS)
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           npm ci
-          npm run build:portable
-
-      - name: Build installer (NSIS)
-        if: steps.check_tag.outputs.exists == 'false'
-        run: npx tauri build --bundles nsis
+          npm run build:portable -- --with-nsis
 
       - name: Package
         if: steps.check_tag.outputs.exists == 'false'
